@@ -24,6 +24,7 @@ signals:
 private slots:
     void onSendControlMsgClicked();
     void onOkRecieved();
+    void onProcessScriptPusb();
 private:
     Ui::ConsoleWnd *ui;
     Log             logUtil;
@@ -31,11 +32,16 @@ private:
     QStringList     entries;
     int             lastIndex;
 
+    void sendCommandBatch(const QString &batch);
+    void sendNextBatchCommand();
+
 protected:
     void keyPressEvent(QKeyEvent *event);
 
 private:
     QCompleter *completer;
+    QStringList pendingCommands;
+    bool        isBatchSending;
 
 
 };

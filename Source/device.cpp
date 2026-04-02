@@ -933,20 +933,30 @@ bool Device::getLoadStatus(bool *status)
 double Device::computeFittedValue(double current)
 {
     // Coefficients derived from symbolic inverse
-    const double scale = 824022.56;
-    const double shift = 824027.57;
-    const double innerFactor = 2.1932e-6;
+//    const double scale = 824022.56;
+//    const double shift = 824027.57;
+//    const double innerFactor = 2.1932e-6;
+
+//    return scale * qSqrt(innerFactor * current + 1.0) - shift;
+    const double scale = 1670467.39;
+    const double shift = 1670471.97;
+    const double innerFactor = 1.4243e-6;
 
     return scale * qSqrt(innerFactor * current + 1.0) - shift;
 }
 double  Device::computeFittedValueInverse(double current)
 {
     // Quadratic coefficients from the fitted model
-    const double a = 6.715e-7;
-    const double b = 1.10666902;
-    const double c = 5.53915624;
+    const double a = 9.58636195e-06;
+    const double b = 1.17902637;
+    const double c = 3.34474657;
+    return a*current*current + b*current + c;
+//    const double a = 1.4149e-5;
+//    const double b = 1.1733;
+//    const double c = -2.0508;
 
-    return a * current * current + b * current + c;
+//    return a * current * current + b * current + c;
+
 }
 bool Device::setLoadCurrent(int current)
 {
@@ -1159,6 +1169,15 @@ void Device::onStatusLinkNewMessageReceived(QString aDeviceIP, QString aMessage)
                     emit sigUVoltageObtained(true);
                 else
                     emit sigUVoltageObtained(false);
+            }
+            if (content.startsWith("ocurrent ", Qt::CaseInsensitive))
+            {
+                QString action = content.mid(QString("ocurrent ").length()).trimmed();
+
+                if (action.compare("enabled", Qt::CaseInsensitive) == 0)
+                    emit sigOCurrentObtained(true);
+                else
+                    emit sigOCurrentObtained(false);
             }
             else if (content.compare("charger charging done", Qt::CaseInsensitive) == 0)
             {

@@ -82,6 +82,8 @@ FORMS += \
     Windows/WSSelection/selectworkspace.ui \
     openept.ui
 
+RC_FILE = appicon.rc
+
 QTPLUGIN += qjpeg
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

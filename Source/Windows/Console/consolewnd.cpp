@@ -1,4 +1,6 @@
-
+#include <QFileDialog>
+#include <QTextStream>
+#include <QRegularExpression>
 #include "consolewnd.h"
 #include "ui_consolewnd.h"
 
@@ -14,6 +16,7 @@ ConsoleWnd::ConsoleWnd(QWidget *parent) :
 
     connect(ui->controlSendPusb, SIGNAL(clicked(bool)), this, SLOT(onSendControlMsgClicked()));
     connect(ui->controlSendLine, SIGNAL(returnPressed()), this, SLOT(onSendControlMsgClicked()));
+    connect(ui->loadScriptPusb,  SIGNAL(clicked(bool)), this, SLOT(onProcessScriptPusb()));
     logUtil.assignLogWidget(ui->controlSendRecievePlte);
     lastIndex = 0;
     QStringList commandList = {
@@ -64,7 +67,11 @@ ConsoleWnd::ConsoleWnd(QWidget *parent) :
         "charger charging termcurrent set",
         "charger charging termcurrent get",
         "charger charging termvoltage set",
-        "charger charging termvoltage get"
+        "charger charging termvoltage get",
+        "device wave chunk add",
+        "device wave counter set",
+        "device wave state set",
+        "device wave clear"
     };
 
     completer = new QCompleter(commandList);
@@ -72,12 +79,50 @@ ConsoleWnd::ConsoleWnd(QWidget *parent) :
 
     ui->controlSendLine->setCompleter(completer);
 
+    isBatchSending = false;
 
 }
-
 ConsoleWnd::~ConsoleWnd()
 {
     delete ui;
+}
+
+void ConsoleWnd::sendCommandBatch(const QString &batch)
+{
+    if (isBatchSending) return;  // prevent overlapping calls
+
+    pendingCommands.clear();
+
+    // Split by newline, preserve semicolons, and trim whitespace
+    QStringList lines = batch.split(QRegExp("[\r\n]+"), Qt::SkipEmptyParts);
+    for (const QString &line : lines) {
+        QString cmd = line.trimmed();
+        if (!cmd.isEmpty()) {
+            pendingCommands.append(cmd);
+        }
+    }
+
+    if (pendingCommands.isEmpty())
+        return;
+
+    isBatchSending = true;
+    sendNextBatchCommand();
+}
+
+void ConsoleWnd::sendNextBatchCommand()
+{
+    if (pendingCommands.isEmpty()) {
+        isBatchSending = false;
+        return;
+    }
+
+    QString nextCommand = pendingCommands.takeFirst();
+    if (!nextCommand.isEmpty()) {
+        logUtil.printLogMessage(" Command: " + nextCommand, LOG_MESSAGE_TYPE_INFO, LOG_MESSAGE_DEVICE_TYPE_CONSOLE);
+        emit sigControlMsgSend(nextCommand);
+    } else {
+        sendNextBatchCommand();  // Skip empty
+    }
 }
 
 void ConsoleWnd::printMessage(QString msg, bool exeStatus)
@@ -89,6 +134,14 @@ void ConsoleWnd::printMessage(QString msg, bool exeStatus)
     else
     {
         logUtil.printLogMessage(" Response: " + msg, LOG_MESSAGE_TYPE_ERROR, LOG_MESSAGE_DEVICE_TYPE_DEVICE);
+    }
+    // Process next batch command if current succeeded
+    if (isBatchSending)
+    {
+        if (exeStatus)
+             sendNextBatchCommand();  // Skip empty
+        else
+            isBatchSending = false; // stop on error
     }
 }
 
@@ -107,6 +160,31 @@ void ConsoleWnd::onSendControlMsgClicked() {
 
 void ConsoleWnd::onOkRecieved() {
     ui->controlSendRecievePlte->appendPlainText("OK");
+}
+
+void ConsoleWnd::onProcessScriptPusb()
+{
+    // Open file dialog to select a text file
+    QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Open Script File"),
+        "",
+        tr("Text Files (*.txt);;All Files (*)"));
+
+    if (fileName.isEmpty())
+        return;  // User canceled
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        logUtil.printLogMessage(" Unable to open file", LOG_MESSAGE_TYPE_ERROR, LOG_MESSAGE_DEVICE_TYPE_CONSOLE);
+        return;
+    }
+
+    QTextStream in(&file);
+    QString scriptContent = in.readAll();
+    file.close();
+    // Send commands batch
+    sendCommandBatch(scriptContent);
 }
 void ConsoleWnd::keyPressEvent(QKeyEvent *event)
 {

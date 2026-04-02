@@ -40,5 +40,7 @@
         <file>images/NewSet/process.png</file>
         <file>images/NewSet/error.png</file>
         <file>images/NewSet/stopHand.png</file>
+        <file>images/NewSet/calibration.png</file>
+        <file>images/NewSet/loadProfiler.png</file>
     </qresource>
 </RCC>

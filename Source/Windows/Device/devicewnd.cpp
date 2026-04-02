@@ -572,6 +572,8 @@ void DeviceWnd::setDeviceInterfaceSelectionState(device_interface_selection_stat
         ui->sampleTimeComb->setEnabled(false);
         ui->advanceOptionPusb->setEnabled(false);
         ui->maxNumOfPacketsLine->setEnabled(false);
+        ui->ConsolePusb->setEnabled(false);
+        ui->DataStatisticsPushb->setEnabled(false);
         ui->saveToFileCheb->setEnabled(false);
         ui->dischargeControlPusb1->setEnabled(false);
         ui->dischargeControlPusb2->setEnabled(false);
@@ -587,6 +589,8 @@ void DeviceWnd::setDeviceInterfaceSelectionState(device_interface_selection_stat
         ui->resolutionComb->setEnabled(true);
         ui->clockDivComb->setEnabled(true);
         ui->sampleTimeComb->setEnabled(true);
+        ui->ConsolePusb->setEnabled(true);
+        ui->DataStatisticsPushb->setEnabled(true);
         ui->advanceOptionPusb->setEnabled(true);
         ui->maxNumOfPacketsLine->setEnabled(true);
         ui->saveToFileCheb->setEnabled(true);
