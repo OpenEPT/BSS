@@ -24,6 +24,10 @@ OpenEPT::OpenEPT(QString aWorkspacePath, QWidget *parent)
 
     dataAnalyzerWnd = new DataAnalyzer(nullptr,aWorkspacePath);
 
+    // Simulator
+    simulatorWnd = new SimulatorWnd(nullptr);
+    connect(ui->actionSimulator, &QAction::triggered, this, &OpenEPT::onActionOpenSimulator);
+
     addDeviceWnd = new AddDeviceWnd(this);
     addDeviceWnd->setWindowFlags(Qt::Dialog | Qt::MSWindowsFixedSizeDialogHint);
     addDeviceWnd->setWindowModality(Qt::WindowModal);
@@ -46,6 +50,11 @@ OpenEPT::~OpenEPT()
 {
     onDeviceContainerAllDeviceWndClosed();
     delete ui;
+}
+
+void OpenEPT::onActionOpenSimulator()
+{
+    simulatorWnd->show();
 }
 
 void OpenEPT::onActionAddSingleDeviceTriggered()

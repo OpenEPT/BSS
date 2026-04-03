@@ -22,6 +22,10 @@ SOURCES += \
     Links/edlink.cpp \
     Links/statuslink.cpp \
     Links/streamlink.cpp \
+    Processing/Simulator/BatteryModel.cpp \
+    Processing/Simulator/SimulatorInputProcessing.cpp \
+    Processing/Simulator/SocReference.cpp \
+    Processing/Simulator/VoltageEstimator.cpp \
     Processing/calibrationdata.cpp \
     Processing/charginganalysis.cpp \
     Processing/dataprocessing.cpp \
@@ -37,6 +41,7 @@ SOURCES += \
     Windows/Device/devicewnd.cpp \
     Windows/Device/energycontrolwnd.cpp \
     Windows/Plot/plot.cpp \
+    Windows/Simulator/SimulatorWindow.cpp \
     Windows/WSSelection/selectworkspace.cpp \
     device.cpp \
     devicecontainer.cpp \
@@ -49,6 +54,10 @@ HEADERS += \
     Links/edlink.h \
     Links/statuslink.h \
     Links/streamlink.h \
+    Processing/Simulator/BatteryModel.h \
+    Processing/Simulator/SimulatorInputProcessing.h \
+    Processing/Simulator/SocReference.h \
+    Processing/Simulator/VoltageEstimator.h \
     Processing/calibrationdata.h \
     Processing/charginganalysis.h \
     Processing/dataprocessing.h \
@@ -65,6 +74,7 @@ HEADERS += \
     Windows/Device/devicewnd.h \
     Windows/Device/energycontrolwnd.h \
     Windows/Plot/plot.h \
+    Windows/Simulator/SimulatorWindow.h \
     Windows/WSSelection/selectworkspace.h \
     device.h \
     devicecontainer.h \

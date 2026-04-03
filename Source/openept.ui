@@ -24,8 +24,8 @@
      <verstretch>0</verstretch>
     </sizepolicy>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout">
-    <item>
+   <layout class="QFormLayout" name="formLayout">
+    <item row="0" column="0">
      <widget class="QMdiArea" name="mdiArea">
       <property name="enabled">
        <bool>true</bool>
@@ -135,6 +135,7 @@
    <addaction name="actionAddSingleDevice"/>
    <addaction name="actionAddMultipleDevices"/>
    <addaction name="actionDataAnalyzer"/>
+   <addaction name="actionSimulator"/>
   </widget>
   <action name="actionAddMultipleDevices">
    <property name="icon">
@@ -166,6 +167,18 @@
     <string>Open and analyze consumption profile</string>
    </property>
   </action>
+  <action name="actionSimulator">
+  <property name="icon">
+   <iconset resource="resource.qrc">
+    <normaloff>:/images/NewSet/process.png</normaloff>:/images/NewSet/process.png</iconset>
+  </property>
+  <property name="text">
+   <string>Simulator</string>
+  </property>
+  <property name="toolTip">
+   <string>Open Battery Simulator</string>
+  </property>
+</action>
  </widget>
  <resources>
   <include location="resource.qrc"/>

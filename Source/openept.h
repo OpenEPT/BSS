@@ -8,6 +8,7 @@
 #include "Windows/DataAnalyzer/dataanalyzer.h"
 #include "devicecontainer.h"
 #include "Windows/Device/energycontrolwnd.h"
+#include "Windows/Simulator/SimulatorWindow.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class OpenEPT; }
@@ -28,6 +29,7 @@ private slots:
     void onDeviceContainerDeviceWndClosed(Device* aDevice);
     void onDeviceContainerAllDeviceWndClosed();
     void onActionOpenAndProcessData();
+    void onActionOpenSimulator();
 
 
 private:
@@ -41,6 +43,8 @@ private:
 
     /**/
     DataAnalyzer                *dataAnalyzerWnd;
+
+    SimulatorWnd                *simulatorWnd;
 
     /* */
     QMessageBox                 msgBox;
