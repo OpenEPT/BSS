@@ -1,5 +1,6 @@
 QT       += core gui opengl concurrent
 QT       += network
+QT       += concurrent
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
@@ -22,9 +23,15 @@ SOURCES += \
     Links/edlink.cpp \
     Links/statuslink.cpp \
     Links/streamlink.cpp \
+    Processing/Simulator/Algo.cpp \
+    Processing/Simulator/BatteryCurrentGenerator.cpp \
     Processing/Simulator/BatteryModel.cpp \
+    Processing/Simulator/NoiseGenerator.cpp \
+    Processing/Simulator/PlatformCurrent.cpp \
+    Processing/Simulator/SimulatorContainer.cpp \
     Processing/Simulator/SimulatorInputProcessing.cpp \
     Processing/Simulator/SocReference.cpp \
+    Processing/Simulator/TimeTable.cpp \
     Processing/Simulator/VoltageEstimator.cpp \
     Processing/calibrationdata.cpp \
     Processing/charginganalysis.cpp \
@@ -54,9 +61,15 @@ HEADERS += \
     Links/edlink.h \
     Links/statuslink.h \
     Links/streamlink.h \
+    Processing/Simulator/Algo.h \
+    Processing/Simulator/BatteryCurrentGenerator.h \
     Processing/Simulator/BatteryModel.h \
+    Processing/Simulator/NoiseGenerator.h \
+    Processing/Simulator/PlatformCurrent.h \
+    Processing/Simulator/SimulatorContainer.h \
     Processing/Simulator/SimulatorInputProcessing.h \
     Processing/Simulator/SocReference.h \
+    Processing/Simulator/TimeTable.h \
     Processing/Simulator/VoltageEstimator.h \
     Processing/calibrationdata.h \
     Processing/charginganalysis.h \

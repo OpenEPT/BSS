@@ -1,4 +1,6 @@
 #include "BatteryModel.h"
+#include "SimulatorInputProcessing.h"
+#include "SocReference.h"
 #include <cmath>
 #include <QDebug>
 
@@ -9,13 +11,18 @@ BatteryModel::BatteryModel(QObject *parent)
     memset(&currentParams, 0, sizeof(batteryParamaters_t));
 }
 
+void BatteryModel::reset(double SocReference)
+{
+    socReference->socReferenceSet(SocReference);
+    memset(&currentParams, 0, sizeof(batteryParamaters_t));
+}
+
 void BatteryModel::batteryModelInit(SimulatorInput *input)
 {
+    simulatorInput = input;
+
     lookupParams  = input->getBatteryParams();
     lookupOcvPoly = input->getCoefficientOcvPoly();
-
-    qDebug() << "BatteryModel: loaded" << lookupParams.size()  << "param rows";
-    qDebug() << "BatteryModel: loaded" << lookupOcvPoly.size() << "OCV poly coeffs";
 }
 
 batteryParamaters_t BatteryModel::stepAndGetParams(float currA, float Ts)
@@ -31,9 +38,10 @@ batteryParamaters_t BatteryModel::stepAndGetParams(float currA, float Ts)
 
 batteryParamaters_t BatteryModel::findParamsByDoD(float dodPct) const
 {
-    if (lookupParams.isEmpty())
+    if (lookupParams.isEmpty()) {
         qDebug() << "Lookup params is empty";
         return batteryParamaters_t{};
+    }
 
     for (int i = 0; i < lookupParams.size() - 1; i++) {
         if (dodPct >= lookupParams[i].dod &&
@@ -45,19 +53,16 @@ batteryParamaters_t BatteryModel::findParamsByDoD(float dodPct) const
     return lookupParams.last();
 }
 
-// OCV polynomial evaluation: OCV = sum(coeff[i] * SoC^i)
 double BatteryModel::getOcv() const
 {
-    double soC    = static_cast<double>(socReference->getSoC());
-    double ocv    = 0.0;
-    double socPow = 1.0;
+    double soC = static_cast<double>(socReference->getSoC());
+    int N = lookupOcvPoly.size();
 
-    for (int i = 0; i < lookupOcvPoly.size(); i++) {
-        ocv    += lookupOcvPoly[i] * socPow;
-        socPow *= soC;
+    double acc = lookupOcvPoly[0];
+    for (int i = 1; i < N; i++) {
+        acc = acc * soC + lookupOcvPoly[i];
     }
-
-    return ocv;
+    return acc;
 }
 
 float BatteryModel::getSoC() const

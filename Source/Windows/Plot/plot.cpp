@@ -3,7 +3,7 @@
 
 #define BUTTONS_SIZE 30
 
-Plot::Plot(int mw, int mh, bool aEnableTracking, QWidget *parent)
+Plot::Plot(int mw, int mh, bool aEnableTracking, QWidget *parent, bool aEnableLegend)
     : QWidget{parent}
 {
     /* Set parent */
@@ -100,6 +100,11 @@ Plot::Plot(int mw, int mh, bool aEnableTracking, QWidget *parent)
 
     scatterFont = new QFont("Times", 14);
     scatterFont->setBold(true);
+
+    if (aEnableLegend) {
+        plot->legend->setVisible(true);
+        plot->legend->setFont(QFont("Helvetica", 10));
+    }
 
     connect(zoomIn, SIGNAL(pressed()), this, SLOT(onZoomIn()));
     connect(zoomOut, SIGNAL(pressed()), this, SLOT(onZoomOut()));
@@ -288,19 +293,19 @@ void        Plot::setTitle(QString aTitle)
     title->setText(aTitle);
     plot->replot();
 }
-void        Plot::clear()
+void Plot::clear()
 {
     plot->graph(0)->data()->clear();
     if(scatterGraphAdded)
     {
         plot->graph(1)->data()->clear();
-        for(int i =0; i < textData.size(); i++)
-        {
+        for(int i = 0; i < textData.size(); i++)
             plot->removeItem(textData[i]);
-        }
     }
     xData.clear();
     yData.clear();
+    xData2.clear();
+    yData2.clear();
     plot->replot();
     epDataKey.clear();
     epDataName.clear();
@@ -308,7 +313,6 @@ void        Plot::clear()
     plotYData.clear();
     plot->xAxis->setRange(0, 1000);
     plot->replot();
-
 }
 void        Plot::onZoomIn()
 {
@@ -384,4 +388,53 @@ void Plot::setButtonStyle()
         zoomExpand->setEnabled(true);
         zoomArea->setEnabled(true);
     }
+}
+
+void Plot::setReplotActive(bool active)
+{
+    replotActive = active;
+}
+
+void Plot::replotAll()
+{
+    plot->graph(0)->setData(xData, yData, true);
+    if (plot->graphCount() > 1 && !xData2.isEmpty())
+        plot->graph(1)->setData(xData2, yData2, true);
+    plot->yAxis->rescale(true);
+    plot->xAxis->rescale(true);
+    plot->replot();
+}
+
+void Plot::addLineGraph(QColor color, QString name)
+{
+    plot->addGraph();
+    int idx = plot->graphCount() - 1;
+    plot->graph(idx)->setPen(QPen(color));
+    if (!name.isEmpty())
+        plot->graph(idx)->setName(name);
+}
+
+void Plot::setGraphName(int graphIndex, QString name)
+{
+    if (graphIndex < plot->graphCount())
+        plot->graph(graphIndex)->setName(name);
+}
+
+void Plot::setSecondGraphData(QVector<double> data, QVector<double> keys)
+{
+    if (plot->graphCount() < 2) return;
+    xData2 = keys;
+    yData2 = data;
+    plot->graph(1)->setData(keys, data, true);
+}
+
+void Plot::appendData2(QVector<double> data, QVector<double> keys)
+{
+    if (plot->graphCount() < 2) return;
+    xData2.append(keys);
+    yData2.append(data);
+    plot->graph(1)->addData(keys, data);
+    plot->yAxis->rescale(true);
+    plot->xAxis->rescale(true);
+    plot->replot();
 }

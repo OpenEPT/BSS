@@ -12,12 +12,17 @@ class SocReference : public QObject
 public:
     explicit SocReference(QObject *parent = nullptr);
 
+    void  socReferenceSet(double socReference);
+    void  setSocIsys(float socIsysCurrent);
     float calculateRefSoC(float currA, float Ts);
+    float calculateRefSoCIsys(float currA, float Ts);
     float getSoC()      const;
+    float getSocIsys()  const;
     float getCapacity() const;
 
 private:
     float soC;
+    float socIsys;
     float capacity;
 };
 

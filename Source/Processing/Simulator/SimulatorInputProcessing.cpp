@@ -6,11 +6,57 @@ SimulatorInput::SimulatorInput(QObject *parent)
 {
 }
 
-// Current CSV format:
-//   Line 1: description
-//   Line 2: dashes
-//   Line 3: header (Current [mA], CurTime [ms])
-//   Line 4+: data
+current_flag_e parseFlag(const QString &str)
+{
+    if (str.trimmed() == "P") return P;
+    if (str.trimmed() == "S") return S;
+    return N;  // default
+}
+
+
+noiseParameters_e SimulatorInput::getNoise(int index) const
+{
+    if (index < 0 || index >= systemNoise.size()) {
+        noiseParameters_e zero{};
+        zero.currentNoise = 0.0f;
+        return zero;
+    }
+    return systemNoise[index];
+}
+
+bool SimulatorInput::loadNoiseCSV(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open current file:" << filePath;
+        emit loadError("Cannot open: " + filePath);
+        return false;
+    }
+
+    QTextStream in(&file);
+
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (line.isEmpty()) continue;
+
+        QStringList parts = line.split(",");
+        if (parts.size() < 2) continue;
+
+        noiseParameters_e noiseEntry;
+        noiseEntry.currentNoise = parts[0].toFloat();
+        noiseEntry.voltageNoise = parts[1].toFloat();
+        systemNoise.append(noiseEntry);
+    }
+
+
+    file.close();
+
+    qDebug() << "File " << filePath << "loaded successfully";
+
+    emit fileLoadedCurrCSV(systemTime.size());
+    return true;
+}
+
 bool SimulatorInput::loadCurrentCSV(const QString &filePath)
 {
     QFile file(filePath);
@@ -28,6 +74,7 @@ bool SimulatorInput::loadCurrentCSV(const QString &filePath)
     systemTime.clear();
     systemCurrent.clear();
 
+    int i = 0;
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed();
         if (line.isEmpty()) continue;
@@ -35,21 +82,27 @@ bool SimulatorInput::loadCurrentCSV(const QString &filePath)
         QStringList parts = line.split(",");
         if (parts.size() < 2) continue;
 
-        float current = parts[0].toFloat();
-        float time    = parts[1].toFloat();
+        current_flag_e flag = parseFlag(parts[0]);
+        float current = parts[1].toFloat();
+        float time    = parts[2].toFloat();
 
+        systemCurrFlags.append(flag);
         systemCurrent.append(current);
         systemTime.append(time);
+
+        i++;
     }
 
+    numberOfCurrentSamples = i;
+
     file.close();
+
+    qDebug() << "File " << filePath << "loaded successfully";
+
     emit fileLoadedCurrCSV(systemTime.size());
     return true;
 }
 
-// OCV polynomial CSV format:
-//   Line 1: header (Coefficient)
-//   Line 2+: one coefficient per line
 bool SimulatorInput::loadCoefcientsOcvPolyCSV(const QString &filePath)
 {
     QFile file(filePath);
@@ -71,13 +124,13 @@ bool SimulatorInput::loadCoefcientsOcvPolyCSV(const QString &filePath)
     }
 
     file.close();
+
+    qDebug() << "File " << filePath << "loaded successfully";
+
     emit fileLoadedCoefOcvPolyCSV();
     return true;
 }
 
-// Parameters CSV format:
-//   Line 1: header
-//   Line 2+: Region, DoD, RSlow, CSlow, RFast, CFast, RInternal, RBorder, RAverage
 bool SimulatorInput::loadParametersCSV(const QString &filePath)
 {
     QFile file(filePath);
@@ -117,20 +170,51 @@ bool SimulatorInput::loadParametersCSV(const QString &filePath)
     }
 
     file.close();
+
+    qDebug() << "File " << filePath << "loaded successfully";
+
     emit fileLoadedParametersCSV();
     return true;
 }
 
-QVector<float> SimulatorInput::getTime() const
+bool SimulatorInput::loadOcvCSV(const QString &filePath)
 {
-    return systemTime;
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open OCV SoC curve file:" << filePath;
+        emit loadError("Cannot open: " + filePath);
+        return false;
+    }
+
+    QTextStream in(&file);
+    in.readLine();
+
+    systemOcvSocCurve.clear();
+
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (line.isEmpty()) continue;
+
+        QStringList parts = line.split(",", Qt::KeepEmptyParts);
+
+        ocvSocCurve_t p;
+        p.soc = parts[0].toFloat();
+        p.ocv = parts[1].toFloat();
+
+        systemOcvSocCurve.append(p);
+    }
+
+    file.close();
+
+    qDebug() << "File " << filePath << "loaded successfully";
+    emit fileLoadedOcvCSV();
+    return true;
 }
 
-QVector<float> SimulatorInput::getCurrent() const
-{
-    return systemCurrent;
-}
+const QVector<float>& SimulatorInput::getTime()    const { return systemTime; }
+const QVector<float>& SimulatorInput::getCurrent() const { return systemCurrent; }
 
+const QVector<current_flag_e>& SimulatorInput::getFlag() const { return systemCurrFlags; }
 QVector<double> SimulatorInput::getCoefficientOcvPoly() const
 {
     return systemCoeffcientOcvPoly;
@@ -140,3 +224,10 @@ QVector<batteryParamaters_t> SimulatorInput::getBatteryParams() const
 {
     return batteryParams;
 }
+
+QVector<ocvSocCurve_t> SimulatorInput::getOcvSocCurve() const
+{
+    return systemOcvSocCurve;
+}
+
+int SimulatorInput::getNumberOfSamples() const{ return numberOfCurrentSamples;}

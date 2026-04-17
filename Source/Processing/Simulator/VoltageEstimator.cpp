@@ -9,6 +9,7 @@ VoltageEstimator::VoltageEstimator(QObject *parent)
     , vFast(0.0)
     , vTerminal(0.0)
 {
+    iBat = 0;
 }
 
 void VoltageEstimator::voltageEstimatorInit(BatteryModel *model)
@@ -25,28 +26,26 @@ void VoltageEstimator::voltageEstimatorInit(BatteryModel *model)
 //   vSlow[k]  = (vSlow[k-1] - I*rSlow) * alphaSlow + I*rSlow
 //   vFast[k]  = (vFast[k-1] - I*rFast) * alphaFast + I*rFast
 //   vTerminal = OCV - I*rInternal - vSlow - vFast
-double VoltageEstimator::calculateTerminalVoltage(float currA, float Ts)
+void VoltageEstimator::calculateTerminalVoltage(float iSys, float iPlatform, float iBat, float Ts)
 {
     if (!batteryModel) {
         qWarning() << "VoltageEstimator: batteryModel not initialized!";
-        return 0.0;
+        return;
     }
 
-    batteryParamaters_t params = batteryModel->stepAndGetParams(currA, Ts);
+    batteryParamaters_t params = batteryModel->stepAndGetParams(iBat, Ts);
 
     double alphaSlow = std::exp(-Ts / (params.rSlow * params.cSlow));
     double alphaFast = std::exp(-Ts / (params.rFast * params.cFast));
 
-    vSlow = (vSlow - currA * params.rSlow) * alphaSlow + currA * params.rSlow;
-    vFast = (vFast - currA * params.rFast) * alphaFast + currA * params.rFast;
+    vSlow = (vSlow - iBat * params.rSlow) * alphaSlow + iBat * params.rSlow;
+    vFast = (vFast - iBat * params.rFast) * alphaFast + iBat * params.rFast;
 
     double ocv = batteryModel->getOcv();
 
-    vTerminal = ocv - currA * params.rInternal - vSlow - vFast;
+    vTerminal = ocv - iBat * params.rInternal - vSlow - vFast;
 
-    emit terminalVoltageCalculated(vTerminal, batteryModel->getSoC());
-
-    return vTerminal;
+    emit terminalVoltageCalculated(vTerminal, iSys, iPlatform, iBat, batteryModel->getSoC());
 }
 
 double VoltageEstimator::getVTerminal() const { return vTerminal; }

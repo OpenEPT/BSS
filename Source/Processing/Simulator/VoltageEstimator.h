@@ -14,18 +14,24 @@ public:
     explicit VoltageEstimator(QObject *parent = nullptr);
 
     void   voltageEstimatorInit(BatteryModel *model);
-    double calculateTerminalVoltage(float currA, float Ts = SAMPLING_PERIOD_S);
 
     double getVTerminal() const;
     double getVSlow()     const;
     double getVFast()     const;
 
+public slots:
+    void calculateTerminalVoltage(float iSys, float iPlatform, float iBat, float Ts = SAMPLING_PERIOD_S);
+
 signals:
-    void terminalVoltageCalculated(double vTerminal, double soC);
+    void terminalVoltageCalculated(double vTerminal, float iSys, float iPlatform, double iBat, double soC);
 
 private:
-    BatteryModel *batteryModel;
 
+    // Inputs
+    BatteryModel *batteryModel;
+    float iBat;
+
+    // Outputs
     double vSlow;
     double vFast;
     double vTerminal;

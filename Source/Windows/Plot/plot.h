@@ -11,7 +11,7 @@ class Plot : public QWidget
 {
     Q_OBJECT
 public:
-    explicit    Plot(int mw, int mh, bool aEnableTracking = true, QWidget *parent = nullptr);
+    explicit    Plot(int mw, int mh, bool aEnableTracking = true, QWidget *parent = nullptr,  bool aEnableLegend = false);
     void        scatterAddGraph();
     void        scatterAddData(QVector<double> data, QVector<double> keys);
     void        scatterAddAllDataWithName(QVector<QPair<QString, int>> data);
@@ -24,7 +24,13 @@ public:
     void        setXRange(double min, double max);
     void        setXLabel(QString label);
     void        setTitle(QString aTitle);
+    void        setGraphName(int graphIndex, QString name);
+    void        addLineGraph(QColor color, QString name = "");
+    void        setSecondGraphData(QVector<double> data, QVector<double> keys);
+    void        appendData2(QVector<double> data, QVector<double> keys);
     void        clear();
+    void setReplotActive(bool active);
+    void replotAll();
 
 signals:
 
@@ -37,6 +43,7 @@ private slots:
     void        onZoomArea();
     void        onMoveGraph();
     void        onTrackGraph();
+
 
 private:
     QCustomPlot *plot;
@@ -59,6 +66,8 @@ private:
     QVector<double> epDataKey;
     QVector<QString> epDataName;
     QVector<QCPItemText *> textData;
+    QVector<double> xData2;
+    QVector<double> yData2;
 
     bool        enableTracking;
     bool        replotActive;
