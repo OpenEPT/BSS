@@ -3,66 +3,72 @@
 
 BatteryCurrentGenerator::BatteryCurrentGenerator(QObject *parent)
     : QObject{parent}
+    , current{0.0, 0.0, 0.0}
 {
-    iSys       = 0.0f;
-    iPlatform  = 0.0f;
-    iBat       = 0.0f;
+    algoCycles = 0;
+    cycleCounter = 0;
+    latch = false;
     outputCurrFlag = N;
     latch      = false;
 }
 
-float BatteryCurrentGenerator::getSystemCurrent(float currA){
-    iSys = currA;
-    return iSys;
+double BatteryCurrentGenerator::getSystemCurrent(double currA){
+    current.iSys = currA;
+    return current.iSys;
 }
 
-void BatteryCurrentGenerator::onPlatformCurrentReady(float currentA){
-    iPlatform = currentA;
-}
+void BatteryCurrentGenerator::getBcgParams(double currA) {
 
+    algoCurrentInfo_t algoCurrentInfo = algo->preProcessing();
 
-void BatteryCurrentGenerator::getBcgParams(float currA, current_flag_e currFlag){
-    switch(currFlag){
+    switch(algoCurrentInfo.flag) {
 
-        // Flag N means no Algo execution
-        case N:{
-            iSys = currA;
-            iPlatform = 0;
-            iBat = iSys;
-
-            outputCurrFlag = currFlag;
-            latch = false;
-
-            break;
-        }
-
-        // Flag P means parrallel regime
-        case P:{
-            iSys = currA;
-
-            emit requestPlatformCurrent(); // Get platform current
-
-            iBat = iSys + iPlatform; // [A]
-
-            //TODO: Flag and latch lopgic should be implemented
-            outputCurrFlag = currFlag;
-
-            break;
-        }
-        case S:{
-
-
-            break;
-        }
-
-        default: break;
+    // Flag N, No Algo execution - Platforma off
+    case N: {
+        current.iSys = currA;
+        current.iPlatform = 0.0;
+        current.iBat = current.iSys;
+        outputCurrFlag = N;
+        break;
     }
 
-    emit batteryCurrentReady(iSys, iPlatform, iBat, 0.01);
+    // Flag P parallel regime - Algo works, Platform on
+    case P: {
+        current.iSys = currA;
+        current.iPlatform = algoCurrentInfo.currentPlatform;
+        current.iBat = current.iSys + current.iPlatform;
+        outputCurrFlag = P;
+        break;
+    }
+
+    case S: {
+        current.iSys = currA;
+        current.iPlatform = 0.0;
+        current.iBat = current.iSys;
+        outputCurrFlag = S;
+        break;
+    }
+
+    default: break;
+    }
+
+    // BCG ready, signal for voltage estimator
+    emit batteryCurrentReady(current.iSys, current.iPlatform, current.iBat, 0.01);
 }
 
-float BatteryCurrentGenerator::getIBat() const {return iBat;}
+void BatteryCurrentGenerator::updateFlagFromAlgo(current_flag_e newFlag)
+{
+    // Update the internal output flag immediately
+    this->outputCurrFlag = newFlag;
 
-float BatteryCurrentGenerator::getIplatform() const {return iPlatform;}
+    // If the flag is N, ensure platform current is 0
+    if (newFlag == N) {
+        current.iPlatform = 0.0;
+    }
+}
 
-float BatteryCurrentGenerator::getIsys() const {return iSys;}
+double BatteryCurrentGenerator::getIBat() const {return current.iBat;}
+
+double BatteryCurrentGenerator::getIplatform() const {return current.iPlatform;}
+
+double BatteryCurrentGenerator::getIsys() const {return current.iSys;}

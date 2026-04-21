@@ -102,6 +102,7 @@ Plot::Plot(int mw, int mh, bool aEnableTracking, QWidget *parent, bool aEnableLe
     scatterFont->setBold(true);
 
     if (aEnableLegend) {
+        plot2Enabled = true;
         plot->legend->setVisible(true);
         plot->legend->setFont(QFont("Helvetica", 10));
     }
@@ -296,7 +297,7 @@ void        Plot::setTitle(QString aTitle)
 void Plot::clear()
 {
     plot->graph(0)->data()->clear();
-    if(scatterGraphAdded)
+    if(plot2Enabled)
     {
         plot->graph(1)->data()->clear();
         for(int i = 0; i < textData.size(); i++)

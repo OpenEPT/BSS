@@ -1,21 +1,25 @@
 #include "Processing/Simulator/SimulatorContainer.h"
 #include <QDebug>
 
-SimulatorContainer::SimulatorContainer(QObject *parent)
+SimulatorContainer::SimulatorContainer(
+    BatteryModel    *sharedBatteryModel,
+    PlatformCurrent *sharedPlatformCurrent,
+    TimeTable       *sharedTimeTable,
+    QObject *parent)
     : QObject(parent)
-    ,currentIndex(0),
-    timeS(0.0f),
-    electricCharge(0.0)
+    , batteryModel(sharedBatteryModel)
+    , platformCurr(sharedPlatformCurrent)
+    , timeTable(sharedTimeTable)
+    , timeS(0.0f)
+    , electricCharges{0.0, 0.0}
+    , globalSampleIndex(0)
 {
-    input            = new SimulatorInput(this);
-    batteryModel     = new BatteryModel(this);
+    inputProcessing  = new SimulatorInput(this);
     voltageEstimator = new VoltageEstimator(this);
     socReference     = new SocReference(this);
-    platformCurr     = new PlatformCurrent(PLATFORM_CURRENT_ESP, this);
     batteryCurrGen   = new BatteryCurrentGenerator(this);
-    timeTable        = new TimeTable(K2, this);
     algo             = new Algo(K2, this);
-    noiseGenerator   = new NoiseGenerator(input);
+    noiseGenerator   = new NoiseGenerator(inputProcessing);
 
     outputFile   = new QFile("/home/filip/Projects/Master/Output/output.csv");
     if (!outputFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -23,17 +27,19 @@ SimulatorContainer::SimulatorContainer(QObject *parent)
     } else {
         qDebug() << "Output file opened successfully";
         outputStream = new QTextStream(outputFile);
-        *outputStream << "K,Flag[N,P,S],Ibat[A],Vbat[V],SoCIsys[%],SoCIbat[%],WhichAlgo[Type],AlgoDuration[ms],ElectricCharge[As]\n";
+        *outputStream << "K,Flag[N,P,S],Ibat[A],Vbat[V],IPlat[A],SoCIsys[%],SoCIbat[%],WhichAlgo[Type],"
+                         "AlgoDuration[ms],ElectricChargeBattery[mAh], ElectricChargeSystem[mAh], ElectricChargeAlgo[mAh],\n";
     }
     outputStream = new QTextStream(outputFile);
-    *outputStream << "K,Flag[N,P,S],Ibat[A],Vbat[V],SoCIsys[%],SoCIbat[%],WhichAlgo[Type],AlgoDuration[ms],ElectricCharge[As]\n";
+    *outputStream << "K,Flag[N,P,S],Ibat[A],Vbat[V],IPlat[A],SoCIsys[%],SoCIbat[%],WhichAlgo[Type],"
+                     "AlgoDuration[ms],ElectricChargeBattery[mAh], ElectricChargeSystem[mAh], ElectricChargeAlgo[mAh],\n";
 
-    connect(batteryCurrGen, &BatteryCurrentGenerator::requestPlatformCurrent,
+    connect(algo, &Algo::requestPlatformCurrent,
             platformCurr, &PlatformCurrent::onPlatformCurrentRequested,
             Qt::DirectConnection);
 
     connect(platformCurr, &PlatformCurrent::platformCurrentReady,
-            batteryCurrGen, &BatteryCurrentGenerator::onPlatformCurrentReady,
+            algo, &Algo::onPlatformCurrentReady,
             Qt::DirectConnection);
 
     connect(batteryCurrGen, &BatteryCurrentGenerator::batteryCurrentReady,
@@ -43,54 +49,68 @@ SimulatorContainer::SimulatorContainer(QObject *parent)
     connect(voltageEstimator, &VoltageEstimator::terminalVoltageCalculated,
             this, [=](double vBat, float iSys, float iPlatform, double iBat, float soc) {
                 if (!offlineMode) {
-                    emit dataSample(timeS, vBat, iSys, iPlatform, iBat, soc * 100.0f, lastSoCIsys);
+                    emit dataSample(timeS, vBat, iSys, iPlatform, iBat, soc * 100.0f, lastValues.lastSoCIsys);
                 }
             }, Qt::DirectConnection);
 
-    connect(algo, &Algo::algoTrigger,
+    connect(algo, &Algo::getWitchAlgo,
             timeTable, &TimeTable::onWitchAlgo,
             Qt::DirectConnection);
 
-    // connect(timeTable, &TimeTable::durationAlgo,
-    //         platformCurr, &PlatformCurrent::platformCurrentReady,
-    //         Qt::DirectConnection);
+    connect(timeTable, &TimeTable::durationAlgo,
+            algo, &Algo::onAlgoDuration,
+            Qt::DirectConnection);
+
+    connect(algo, &Algo::flagStatusChanged, batteryCurrGen,
+            &BatteryCurrentGenerator::updateFlagFromAlgo,
+            Qt::DirectConnection);
+
+    connect(voltageEstimator, &VoltageEstimator::terminalVoltageCalculated,
+            algo, &Algo::onVoltageEstimatorDone,
+            Qt::DirectConnection);
 }
 
 bool SimulatorContainer::loadFiles()
 {
     if (paramsFilePath.isEmpty()  || ocvPolyFilePath.isEmpty() ||
         ocvSocFilePath.isEmpty()  || currentFilePath.isEmpty() ||
-        noisePath.isEmpty())
+        noisePath.isEmpty()       || flagPath.isEmpty())
     {
         emit loadError("Not all file paths are set");
         return false;
     }
 
-    if (!input->loadParametersCSV(paramsFilePath)) {
+    if (!inputProcessing->loadParametersCSV(paramsFilePath)) {
         emit loadError("Failed to load parameters");
         return false;
     }
-    if (!input->loadCoefcientsOcvPolyCSV(ocvPolyFilePath)) {
+    if (!inputProcessing->loadCoefcientsOcvPolyCSV(ocvPolyFilePath)) {
         emit loadError("Failed to load OCV poly");
         return false;
     }
-    if (!input->loadOcvCSV(ocvSocFilePath)) {
+    if (!inputProcessing->loadOcvCSV(ocvSocFilePath)) {
         emit loadError("Failed to load OCV SoC curve");
         return false;
     }
-    if (!input->loadCurrentCSV(currentFilePath)) {
+    if (!inputProcessing->loadCurrentCSV(currentFilePath)) {
         emit loadError("Failed to load current CSV");
         return false;
     }
-    if(!input->loadNoiseCSV(noisePath)){
-        emit loadError("Failed to load noise CSV");  // ← pogrešna poruka
+    if(!inputProcessing->loadNoiseCSV(noisePath)){
+        emit loadError("Failed to load noise CSV");
+        return false;
+    }
+    if(!inputProcessing->loadAlgoFlagsCSV(flagPath)){
+        emit loadError("Failed to flag CSV");
         return false;
     }
 
-    batteryModel->batteryModelInit(input);
+    algo->setAlgoDynamics(inputProcessing->getAlgoFlags());
+    batteryModel->batteryModelInit(inputProcessing);
+    batteryCurrGen->setAlgo(algo);
     voltageEstimator->voltageEstimatorInit(batteryModel);
-    currentIndex   = 0;
-    electricCharge = 0.0;
+    globalSampleIndex   = 0;
+    electricCharges.electricChargeBattery = 0.0;
 
     emit loadSuccess();
     return true;
@@ -118,18 +138,22 @@ QString flagToString(current_flag_e flag)
     }
 }
 
-void writeFile(QTextStream *outputStream, int k, current_flag_e flag, float iBat, double vBat,
-               float socIsys, float soc, algoTimeTableDuration_e algoDuration, float elecrticCharge)
+void writeFile(QTextStream *outputStream, int k, current_flag_e flag, float iBat, double vBat, float iPlat,
+               float socIsys, float soc, algoTimeTableDuration_e algoDuration,
+               double elecrticChargeBattery, double elecrticChargeSystem, double elecrticChargeAlgo)
 {
     *outputStream << k                          << ","
                   << flagToString(flag)         << ","
                   << iBat                       << ","
                   << vBat                       << ","
+                  << iPlat                      << ","
                   << socIsys                    << ","
                   << soc                        << ","
                   << algoToString(algoDuration) << ","  // ← string umesto int
                   << algoDuration               << ","  // ← trajanje u ms
-                  << elecrticCharge             << "\n";
+                  << elecrticChargeBattery      << ","
+                  << elecrticChargeSystem      << ","
+                  << elecrticChargeSystem       << "\n";
     outputStream->flush();
 }
 
@@ -137,71 +161,83 @@ void SimulatorContainer::step()
 {
     if (isFinished()) return;
 
-    // Cache references (no copy!)
-    const auto& currVec = input->getCurrent();
-    const auto& timeVec = input->getTime();
-    const auto& flagVec = input->getFlag();
+    const auto& currVec = inputProcessing->getCurrent();
+    const auto& timeVec = inputProcessing->getTime();
 
-    // Take Noise
-    noiseParameters_e noise = noiseGenerator->getNoise(currentIndex);
+    noiseParameters_e noise = noiseGenerator->getNoise(globalSampleIndex);
+    double iSysA = 0.0;
+    if (globalSampleIndex < currVec.size())
+        iSysA = currVec[globalSampleIndex] / 1000.0f;
 
-    // Get current + noise
-    float currA = currVec[currentIndex] / 1000.0f; // mA → A
-    currA += noise.currentNoise;
+    iSysA += noise.currentNoise;
 
-    // Calculate Isys SoC reference
-    float socIsysRef = socReference->calculateRefSoCIsys(currA, 0.01) * 100;
-    lastSoCIsys   = socIsysRef;
+    if (globalSampleIndex < timeVec.size())
+        timeS = timeVec[globalSampleIndex] / 1000.0f;
 
-    // Get time and flag
-    timeS                  = timeVec[currentIndex] / 1000.0f; // ms → s
-    current_flag_e flag    = flagVec[currentIndex];
+    // SoC reference
+    double socIsysRef = socReference->calculateRefSoCIsys(iSysA, 0.01) * 100;
 
-    // System current goes to BCG modul
-    float iSys = batteryCurrGen->getSystemCurrent(currA);
-    batteryCurrGen->getBcgParams(iSys, flag);
+    // BCG - interno poziva algo->preProcessingSystem()
+    double iSys = batteryCurrGen->getSystemCurrent(iSysA);
+    batteryCurrGen->getBcgParams(iSys);
 
-    // If flag is P/S triggers time table
+    // VE računa napon - emituje signal → algo->onVoltageEstimatorDone → processingSystem
+    double iBat      = batteryCurrGen->getIBat();
+    double vBat      = voltageEstimator->getVTerminal();
+    double soc       = batteryModel->getSoC() * 100.0f;
+    double iPlatform = batteryCurrGen->getIplatform();
+
+    current_flag_e          outputFlag   = batteryCurrGen->getOutputFlag();
     algoTimeTableDuration_e algoDuration = timeTable->getWhitchAlgo();
-    float durationMS = static_cast<float>(algoDuration);
 
-    // Get platform current + electric charge
-    float currMA = batteryCurrGen->getIplatform();
-    float q      = (currMA / 1000.0f) * (durationMS / 1000.0f);
+    // Coulomb Counting
+    double dt = 0.0;
+    if (globalSampleIndex > 0 && globalSampleIndex < timeVec.size())
+        dt = (timeVec[globalSampleIndex] - timeVec[globalSampleIndex - 1]) / 1000.0f;
 
-    // Take I, V, SoC
-    float  iBat = batteryCurrGen->getIBat();
-    double vBat = voltageEstimator->getVTerminal();
-    float  soc  = batteryModel->getSoC() * 100.0f;
+    electricCharges.electricChargeBattery += (iBat   * dt) / 3.6;
+    electricCharges.electricChargeSystem  += (iSysA   * dt) / 3.6;
+    electricCharges.electricChargeAlgo     = algo->getQBath();
 
-    if (flag == N) {
-        writeFile(outputStream, currentIndex, flag, iBat, vBat, socIsysRef, soc, algoDuration, electricCharge);
-    } else {
-        electricCharge += q;
-        algo->algoExe(K2);
-        writeFile(outputStream, currentIndex, flag, iBat, vBat, socIsysRef, soc, algoDuration, electricCharge);
-    }
+    // Log
+    writeFile(outputStream,
+              globalSampleIndex,
+              outputFlag,
+              iBat,
+              vBat,
+              iPlatform,
+              socIsysRef,
+              soc,
+              algoDuration,
+              algo->getQBath(),
+              electricCharges.electricChargeSystem,
+              electricCharges.electricChargeAlgo);
 
-    lastIBat      = iBat;
-    lastVBat      = vBat;
-    lastISys      = iSys;
-    lastIPlatform = batteryCurrGen->getIplatform();
-    lastSoC       = soc;
-    lastSoCIsys   = socIsysRef;
-    lastElectricCharge = electricCharge;
+    // Save values
+    lastValues.lastIBat                  = iBat;
+    lastValues.lastVBat                  = vBat;
+    lastValues.lastISys                  = iSys;
+    lastValues.lastIPlatform             = iPlatform;
+    lastValues.lastSoC                   = soc;
+    lastValues.lastSoCIsys               = socIsysRef;
+    lastValues.lastElectricChargeBattery = electricCharges.electricChargeBattery;
+    lastValues.lastElectricChargeSystem  = electricCharges.electricChargeSystem;
+    lastValues.lastElectricChargeAlgo    = electricCharges.electricChargeAlgo;
 
-    currentIndex++;
+    globalSampleIndex++;
 }
 
 void SimulatorContainer::reset(double SocReference)
 {
-    currentIndex = 0;
+    globalSampleIndex = 0;
     voltageEstimator->voltageEstimatorInit(batteryModel);
     socReference->socReferenceSet(SocReference);
+    socReference->setSocIsys(SocReference);
     batteryModel->reset(SocReference);
+    algo->algoReset();
 }
 
 bool SimulatorContainer::isFinished() const
 {
-    return currentIndex >= input->getNumberOfSamples();
+    return globalSampleIndex >= inputProcessing->getNumberOfSamples();
 }

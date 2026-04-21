@@ -6,6 +6,12 @@
 
 #define SAMPLING_PERIOD_S  0.01
 
+typedef struct voltagesEstimators_t {
+    double vSlow;
+    double vFast;
+    double vTerminal;
+} voltagesEstimators_t;
+
 class VoltageEstimator : public QObject
 {
     Q_OBJECT
@@ -32,9 +38,7 @@ private:
     float iBat;
 
     // Outputs
-    double vSlow;
-    double vFast;
-    double vTerminal;
+    voltagesEstimators_t voltage;
 };
 
 #endif // VOLTAGEESTIMATOR_H

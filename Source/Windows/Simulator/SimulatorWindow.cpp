@@ -46,8 +46,13 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     , timerPeriodMs(10)
     , currentSample(0)
 {
+
+    batteryModel    = new BatteryModel(this);
+    platformCurrent = new PlatformCurrent(PLATFORM_CURRENT_ESP, this);
+    timeTable       = new TimeTable(K2, this);
+
     // Simulator container constructor
-    simulatorContainer = new SimulatorContainer(this);
+    simulatorContainer = new SimulatorContainer(batteryModel, platformCurrent, timeTable, this);
 
 
     // Timer for online analysys of simulator
@@ -79,8 +84,6 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     logInfoBtn = new QToolButton(this);
     logInfoBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/info_button.png"));
     logInfoBtn->setFixedSize(30, 30);
-
-
 
 
     // Initial button state
@@ -158,29 +161,59 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     currentBatteryDock = new QDockWidget("Battery Current", this);
     currentBatteryDock->setWidget(currentBatteryPlot);
     currentBatteryDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    currentBatteryDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable
+        );
 
     currentSystemDock = new QDockWidget("System Current", this);
     currentSystemDock->setWidget(currentSystemPlot);
     currentSystemDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    currentSystemDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable
+        );
 
     currentPlatformDock = new QDockWidget("Platform Current", this);
     currentPlatformDock->setWidget(currentPlatformPlot);
     currentPlatformDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    currentPlatformDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable
+        );
 
     voltageDock = new QDockWidget("Battery Voltage", this);
     voltageDock->setWidget(voltagePlot);
     voltageDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    voltageDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable
+        );
 
     socDock = new QDockWidget("SOC", this);
     socDock->setWidget(socPlot);
     socDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    socDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable
+        );
 
     logDock = new QDockWidget("Log Console", this);
     logDock->setWidget(logConsole);
     logDock->setAllowedAreas(Qt::BottomDockWidgetArea);
+    logDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable
+        );
+
+
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
-
-
     addDockWidget(Qt::LeftDockWidgetArea,  currentBatteryDock);
     addDockWidget(Qt::LeftDockWidgetArea,  currentSystemDock);
     addDockWidget(Qt::LeftDockWidgetArea,  currentPlatformDock);
@@ -338,13 +371,15 @@ void SimulatorWnd::onConfigClicked()
     analysisGroupBox->setLayout(analysisLayout);
 
     // ================= COMBO BOX =================
-    QComboBox *algoComboBox = new QComboBox();
-    algoComboBox->addItem("K0 slow");
-    algoComboBox->addItem("K0 fast");
-    algoComboBox->addItem("K2 slow");
-    algoComboBox->addItem("K2 fast");
-    algoComboBox->addItem("Adaptive slow");
-    algoComboBox->addItem("Adaptive fast");
+    QCheckBox *k0 = new QCheckBox("K0");
+    QCheckBox *k2 = new QCheckBox("K2");
+    QCheckBox *lp = new QCheckBox("LP");
+    QCheckBox *adaptive = new QCheckBox("Adaptive");
+
+    // Default k0 checked
+    k0->setChecked(this);
+
+    QList<QCheckBox*> algoChecks = {k0, k2, lp, adaptive};
 
     QComboBox *platformComboBox = new QComboBox();
     platformComboBox->addItem("ESP32");
@@ -362,7 +397,11 @@ void SimulatorWnd::onConfigClicked()
     choosePlatformLayout->addWidget(platformComboBox);
     choosePlatformGroupBox->setLayout(choosePlatformLayout);
 
-    rightAlgoGroup->addWidget(algoComboBox);
+    rightAlgoGroup->addWidget(k0);
+    rightAlgoGroup->addWidget(k2);
+    rightAlgoGroup->addWidget(lp);
+    rightAlgoGroup->addWidget(adaptive);
+
     algoGroup->setLayout(rightAlgoGroup);
 
     // ================= CHECKBOXES =================
@@ -407,6 +446,10 @@ void SimulatorWnd::onConfigClicked()
     QLineEdit *noisePath = new QLineEdit(this->noisePath);
     noisePath->setReadOnly(true);
 
+    QPushButton *loadFlagsBtn = new QPushButton("Flags");
+    QLineEdit *flagsPath = new QLineEdit(this->flagPath);
+    flagsPath->setReadOnly(true);
+
     auto createRow = [&](QPushButton *btn, QLineEdit *edit) {
         QHBoxLayout *row = new QHBoxLayout();
         row->setContentsMargins(4, 2, 4, 2);  // levo, gore, desno, dole
@@ -427,6 +470,8 @@ void SimulatorWnd::onConfigClicked()
     createRow(loadParamsBtn, paramsPath);
     rightFilesGroup->addStretch();
     createRow(loadNoisesBtn, noisePath);
+    rightFilesGroup->addStretch();
+    createRow(loadFlagsBtn, flagsPath);
     rightFilesGroup->addStretch();
 
     inputFilesGroup->setLayout(rightFilesGroup);
@@ -503,12 +548,11 @@ void SimulatorWnd::onConfigClicked()
     // connectFileBtn(loadParamsBtn, paramsPath, "Select Params File");
     // connectFileBtn(loadNoisesBtn, noisePath, "Select Noise File");
 
-    currentPath->setText("/home/filip/Projects/Master/Params/current_output_haris_big.csv");
+    currentPath->setText("/home/filip/Projects/Master/Params/current_pattern_najnoviji.csv");
     polyPath->setText("/home/filip/Projects/Master/Params/ocv_poly_10.csv");
     ocvSocPath->setText("/home/filip/Projects/Master/Params/ocv.csv");
     paramsPath->setText("/home/filip/Projects/Master/Params/parameters.csv");
     noisePath->setText("/home/filip/Projects/Master/Params/noise.csv");
-
 
     // ================= EXEC =================
     if (dialog->exec() == QDialog::Accepted) {
@@ -524,6 +568,30 @@ void SimulatorWnd::onConfigClicked()
             return;
         }
 
+        algoTimeTableDuration_e algoSelected = LP;
+
+        if (k0->isChecked()){
+            algoSelected = K0;
+            flagsPath->setText("/home/filip/Projects/Master/Params/flags_k0.csv");
+        }
+        else if (k2->isChecked()){
+            algoSelected = K2;
+            flagsPath->setText("/home/filip/Projects/Master/Params/flags_k2.csv");
+        }
+        else if (lp->isChecked()){
+            algoSelected = LP;
+            flagsPath->setText("/home/filip/Projects/Master/Params/flags_lp.csv");
+        }
+        else if (adaptive->isChecked()){
+            algoSelected = ADAPTIVE_LP_K2;
+            flagsPath->setText("/home/filip/Projects/Master/Params/flags_adaptive.csv");
+        }
+        else{
+            flagsPath->setText("/home/filip/Projects/Master/Params/flags_adaptive.csv");
+        }
+
+        simulatorContainer->setAlgoSelected(algoSelected);
+
         selectedPlatform = platformComboBox->currentText();
         platform_current_mah_e platform = platformMap.value(selectedPlatform, PLATFORM_CURRENT_ESP);
         simulatorContainer->setPlatformCurrent(platform);
@@ -537,25 +605,29 @@ void SimulatorWnd::onConfigClicked()
 
         redistributeDocks();
 
-        currPath       = currentPath->text();
-        polynomsPath   = polyPath->text();
-        ocvSOCPath     = ocvSocPath->text();
-        parametersPath = paramsPath->text();
-        this->noisePath= noisePath->text();
+        currPath        = currentPath->text();
+        polynomsPath    = polyPath->text();
+        ocvSOCPath      =  ocvSocPath->text();
+        parametersPath  = paramsPath->text();
+        this->noisePath = noisePath->text();
+        this->flagPath  = flagsPath->text();
 
         simulatorContainer->setCurrentPath(currPath);
         simulatorContainer->setOcvPolyPath(polynomsPath);
         simulatorContainer->setOcvSocPath(ocvSOCPath);
         simulatorContainer->setParamsPath(parametersPath);
         simulatorContainer->setNoisePath(this->noisePath);
+        simulatorContainer->setFlagsPath(this->flagPath);
 
         if (onlineAnalysys->isChecked()) {
             isOfflineMode = false;
+            simulatorContainer->setOfflineMode(false);
             speedUpBtn->setEnabled(true);
             speedUpBtn->setText("1x");
             timerPeriodMs = 10;
         } else {
             isOfflineMode = true;
+            simulatorContainer->setOfflineMode(true);
             speedUpBtn->setEnabled(false);
             speedUpBtn->setText("Offline");
         }
@@ -567,6 +639,15 @@ void SimulatorWnd::onConfigClicked()
     }
 }
 
+auto formatSeconds = [](float totalSeconds) -> QString {
+    int h = (int)(totalSeconds / 3600);
+    int m = (int)((totalSeconds - h * 3600) / 60);
+    int s = (int)(totalSeconds - h * 3600 - m * 60);
+    return QString("%1h %2m %3s")
+        .arg(h, 2, 10, QChar('0'))
+        .arg(m, 2, 10, QChar('0'))
+        .arg(s, 2, 10, QChar('0'));
+};
 
 /*******************************************************************************
  * Slot - Log Info clicked - shows post simulations results
@@ -575,58 +656,124 @@ void SimulatorWnd::onLogInfoClicked()
 {
     QDialog *dialogWindow = new QDialog(this);
     dialogWindow->setWindowTitle("Simulation Log");
-    dialogWindow->resize(400, 400);
+    dialogWindow->resize(450, 550);
 
-    QVBoxLayout *layout = new QVBoxLayout(this);
-
-
-    QTextEdit *resultsText = new QTextEdit(dialogWindow);
-    resultsText->setReadOnly(true);
-    resultsText->setFixedSize(400, 400);
+    QVBoxLayout *layout = new QVBoxLayout(dialogWindow);
 
     platform_current_mah_e platformCurrent = PLATFORM_CURRENT_ESP;
-
-    if (selectedPlatform == "ESP32")
-        platformCurrent = PLATFORM_CURRENT_ESP;
-    else if (selectedPlatform == "NXP")
-        platformCurrent = PLATFORM_CURRENT_NXP;
-    else if (selectedPlatform == "STM32")
-        platformCurrent = PLATFORM_CURRENT_STM;
-    else if (selectedPlatform == "NRF")
-        platformCurrent = PLATFORM_CURRENT_NRF;
-
+    if      (selectedPlatform == "ESP32") platformCurrent = PLATFORM_CURRENT_ESP;
+    else if (selectedPlatform == "NXP")   platformCurrent = PLATFORM_CURRENT_NXP;
+    else if (selectedPlatform == "STM32") platformCurrent = PLATFORM_CURRENT_STM;
+    else if (selectedPlatform == "NRF")   platformCurrent = PLATFORM_CURRENT_NRF;
     float current = static_cast<float>(platformCurrent);
 
+    lastSimulationStepsValues finalResults = simulatorContainer->getLastValuesOfSimulationStep();
 
-    resultsText->setFont(QFont("Courier New", 10));  // monospace font za poravnanje
+    float timeSimulationElapsed = simulatorContainer->getTimeS();
+    QTime time = QTime::fromMSecsSinceStartOfDay(static_cast<int>(timeSimulationElapsed * 1000));
+    QString formattedTime = time.toString("hh'h' mm'm' ss's'");
 
-    resultsText->append("=== Simulation Results ===\n");
-    resultsText->append(QString("%1 %2")        .arg("Platform:",               -25).arg(selectedPlatform));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2")        .arg("Total samples:",          -25).arg(simulatorContainer->getNumberOfSamples()));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 %")      .arg("Initial SoC Battery:",    -25).arg(initialSoC * 100.0, 0, 'f', 1));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 %")      .arg("Final SoC Battery:",      -25).arg(simulatorContainer->getSoC(), 0, 'f', 2));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 %")      .arg("Initial SoC System:",     -25).arg(initialSoC * 100.0, 0, 'f', 1));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 %")      .arg("Final SoC System:",      -25).arg(simulatorContainer->getSoCIsys(), 0, 'f', 2));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 V")      .arg("Final Terminal Voltage:", -25).arg(simulatorContainer->getVBat(), 0, 'f', 4));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 A")      .arg("Average Battery Current:",-25).arg(averageBatteryCurr, 0, 'f', 4));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 A")      .arg("Average System Current:", -25).arg(averageSystemCurr, 0, 'f', 4));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 mA")      .arg("Platform Current:",       -25).arg(current, 0, 'f', 4));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 As")     .arg("Electric Charge:",        -25).arg(simulatorContainer->getElectricCharge(), 0, 'f', 4));
-    resultsText->append(" ");
-    resultsText->append(QString("%1 %2 s")      .arg("Simulation Time:",        -25).arg(simulatorContainer->getTimeS(), 0, 'f', 1));
-    resultsText->append(" ");
+    double deltaSOC = (initialSoC * 100.0) - finalResults.lastSoC;
+    double capacityMah = 0.0;
+    if (deltaSOC > 0.0)
+        capacityMah = (finalResults.lastElectricChargeBattery / deltaSOC) * 100.0;
 
-    layout->addWidget(resultsText);
+    double avgSysMa = averageSystemCurr * 1000.0;
+    double avgBatMa = averageBatteryCurr * 1000.0;
+
+    auto formatSeconds = [](float totalSeconds) -> QString {
+        int h = (int)(totalSeconds / 3600);
+        int m = (int)((totalSeconds - h * 3600) / 60);
+        int s = (int)(totalSeconds - h * 3600 - m * 60);
+        return QString("%1h %2m %3s")
+            .arg(h, 2, 10, QChar('0'))
+            .arg(m, 2, 10, QChar('0'))
+            .arg(s, 2, 10, QChar('0'));
+    };
+
+    float maximalOperationalTimeOfSystem = 0.0f;
+    if (avgSysMa > 0.0)
+        maximalOperationalTimeOfSystem = (float)((capacityMah / avgSysMa) * 3600.0);
+
+    float operationalTimeOfSystemWithAlgo = 0.0f;
+    if (avgBatMa > 0.0)
+        operationalTimeOfSystemWithAlgo = (float)((capacityMah / avgBatMa) * 3600.0);
+
+    float algoTimeCost = maximalOperationalTimeOfSystem - operationalTimeOfSystemWithAlgo;
+
+    QTableWidget *table = new QTableWidget(dialogWindow);
+    table->setColumnCount(2);
+    table->horizontalHeader()->setVisible(false);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table->verticalHeader()->setVisible(false);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionMode(QAbstractItemView::NoSelection);
+    table->setFocusPolicy(Qt::NoFocus);
+    table->setAlternatingRowColors(true);
+    table->setShowGrid(false);
+
+    auto addSeparator = [&](const QString &title) {
+        int row = table->rowCount();
+        table->insertRow(row);
+        QTableWidgetItem *item = new QTableWidgetItem(" " + title);
+        QFont f = item->font();
+        f.setBold(true);
+        item->setFont(f);
+        item->setBackground(QColor("#efefef"));
+        table->setItem(row, 0, item);
+        QTableWidgetItem *empty = new QTableWidgetItem("");
+        empty->setBackground(QColor("#efefef"));
+        table->setItem(row, 1, empty);
+        table->setRowHeight(row, 20);
+    };
+
+    auto addRow = [&](const QString &label, const QString &value, bool bold = false) {
+        int row = table->rowCount();
+        table->insertRow(row);
+        table->setItem(row, 0, new QTableWidgetItem(label));
+        QTableWidgetItem *valItem = new QTableWidgetItem(value);
+        valItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        if (bold) {
+            QFont f = valItem->font();
+            f.setBold(true);
+            valItem->setFont(f);
+        }
+        table->setItem(row, 1, valItem);
+        table->setRowHeight(row, 24);
+    };
+
+    addSeparator("General");
+    addRow("Platform",            selectedPlatform);
+    addRow("Total Samples",       QString::number(simulatorContainer->getNumberOfSamples()));
+
+    addSeparator("State of Charge");
+    addRow("Initial SoC Battery", QString("%1 %").arg(initialSoC * 100.0, 0, 'f', 1));
+    addRow("Final SoC Battery",   QString("%1 %").arg(finalResults.lastSoC, 0, 'f', 2));
+    addRow("Initial SoC System",  QString("%1 %").arg(initialSoC * 100.0, 0, 'f', 1));
+    addRow("Final SoC System",    QString("%1 %").arg(finalResults.lastSoCIsys, 0, 'f', 2));
+
+    addSeparator("Voltage");
+    addRow("Final Terminal Voltage", QString("%1 V").arg(finalResults.lastVBat, 0, 'f', 4));
+
+    addSeparator("Current");
+    addRow("Avg Battery Current", QString("%1 mA").arg(averageBatteryCurr * 1000.0, 0, 'f', 4));
+    addRow("Avg System Current",  QString("%1 mA").arg(averageSystemCurr  * 1000.0, 0, 'f', 4));
+    addRow("Platform Current",    QString("%1 mA").arg(current, 0, 'f', 4));
+
+    addSeparator("Electric Charge");
+    addRow("Battery Capacity",    QString("%1 mAh").arg(capacityMah, 0, 'f', 2));
+    addRow("Charge Battery",      QString("%1 mAh").arg(finalResults.lastElectricChargeBattery, 0, 'f', 4));
+    addRow("Charge System",       QString("%1 mAh").arg(finalResults.lastElectricChargeSystem,  0, 'f', 4));
+    addRow("Charge Algo",         QString("%1 mAh").arg(finalResults.lastElectricChargeAlgo,    0, 'f', 4));
+
+    addSeparator("Time");
+    addRow("Simulation Time",    formattedTime);
+    addRow("Maximal Oper. Time", formatSeconds(maximalOperationalTimeOfSystem));
+    addRow("System Oper. Time",  formatSeconds(operationalTimeOfSystemWithAlgo));
+    addRow("Algo Time Cost",     formatSeconds(algoTimeCost), true);
+
+    layout->addWidget(table);
 
     QDialogButtonBox *btn = new QDialogButtonBox(QDialogButtonBox::Close);
     connect(btn, &QDialogButtonBox::rejected, dialogWindow, &QDialog::reject);
@@ -842,10 +989,8 @@ void SimulatorWnd::redistributeDocks()
  ******************************************************************************/
 void SimulatorWnd::startOfflineSimulation()
 {
-    // Run worker thread
     QtConcurrent::run([this]() {
 
-        // Do UI things in main thread
         QMetaObject::invokeMethod(this, [=]() {
             playBtn->setEnabled(false);
             configBtn->setEnabled(false);
@@ -853,88 +998,100 @@ void SimulatorWnd::startOfflineSimulation()
             statusPlaySimulationLabel->setText("Offline Processing");
         }, Qt::BlockingQueuedConnection);
 
-        // Setting offline mode for Simulator Container
-        simulatorContainer->setOfflineMode(true);
+        simulatorAlgoResults.samples.clear();
+        simulatorAlgoResults.algoName = QString::number(algoSelected);
 
-        // Get total samples
-        int total = simulatorContainer->getNumberOfSamples();
-
-        // Local vectors in Worker Thread
-        QVector<double> vTime, vBat, vIBat, vISys, vIPlatform, vSoc, vSocIsys;
-        vTime.reserve(total);
-        vBat.reserve(total);
-        vIBat.reserve(total);
-        vISys.reserve(total);
-        vIPlatform.reserve(total);
-        vSoc.reserve(total);
-        vSocIsys.reserve(total);
-
-        // Local samples counter
-        int localSample = 0;
         simulatorContainer->reset(initialSoC);
 
-        // Loop
-        while (!simulatorContainer->isFinished()) {
+        averageBatteryCurr = 0.0;
+        averageSystemCurr  = 0.0;
 
-            // One step in simulator
+        double endSoc = getSimulationEndSoC() * 100.0;
+
+        int localSample = 0;
+
+        while (!simulatorContainer->isFinished())
+        {
             simulatorContainer->step();
 
-            // Append all results
-            vTime.append(simulatorContainer->getTimeS());
-            vBat.append(simulatorContainer->getVBat());
-            vIBat.append(simulatorContainer->getIBat());
-            vISys.append(simulatorContainer->getISys());
-            vIPlatform.append(simulatorContainer->getIPlatform());
-            vSoc.append(simulatorContainer->getSoC());
-            vSocIsys.append(simulatorContainer->getSoCIsys());
+            SimulatorSample_t sample;
 
-            double endSoc = getSimulationEndSoC() * 100.0;
+            sample.time = simulatorContainer->getTimeS();
 
-            if(vSoc[localSample] <= endSoc){
-                for(int i = 0; i < localSample; i++){
-                    averageBatteryCurr += vIBat[localSample];
-                    averageSystemCurr  += vISys[localSample];
-                }
-                averageBatteryCurr /= localSample;
-                averageSystemCurr /= localSample;
-                break;
-            }
+            sample.current.system  = simulatorContainer->getISys();
+            sample.current.battery = simulatorContainer->getIBat();
+            sample.current.platform = simulatorContainer->getIPlatform();
 
-            // Increment sample
+            sample.voltage.battery = simulatorContainer->getVBat();
+
+            sample.soc.system  = simulatorContainer->getSoCIsys();
+            sample.soc.battery = simulatorContainer->getSoC();
+
+            sample.electricCharge.electricChargeBattery = simulatorContainer->getElectricChargeBattery();
+            sample.electricCharge.electricChargeSystem = simulatorContainer->getElectricChargeSystem();
+
+            simulatorAlgoResults.samples.append(sample);
+
+            averageBatteryCurr += sample.current.battery;
+            averageSystemCurr  += sample.current.system;
+
             localSample++;
 
-            // Update progress bar
+            if (sample.soc.battery <= endSoc)
+                break;
+
             if (localSample % 1000 == 0) {
-                int pct = (localSample * 100) / total;
+                int pct = (localSample * 100) / simulatorContainer->getNumberOfSamples();
                 QMetaObject::invokeMethod(this, [=]() {
                     progressBar->setValue(pct);
                 });
             }
         }
 
-        // Main thread invoke
+        // FINAL AVG
+        if (localSample > 0) {
+            averageBatteryCurr /= localSample;
+            averageSystemCurr  /= localSample;
+        }
+
         QMetaObject::invokeMethod(this, [=]() {
 
-            // Setting data to plot
-            currentBatteryPlot->setData(vIBat,       vTime);
-            currentSystemPlot->setData(vISys,        vTime);
-            currentPlatformPlot->setData(vIPlatform, vTime);
-            voltagePlot->setData(vBat,               vTime);
-            socPlot->setData(vSoc,                   vTime);
-            socPlot->setSecondGraphData(vSocIsys,    vTime);
+            QVector<double> vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys;
 
-            // Replot it all
+            vTime.reserve(simulatorAlgoResults.samples.size());
+
+            for (const auto &s : simulatorAlgoResults.samples)
+            {
+                vTime.push_back(s.time);
+
+                vBat.push_back(s.voltage.battery);
+
+                vIbat.push_back(s.current.battery);
+                vISys.push_back(s.current.system);
+                vIPlatform.push_back(s.current.platform);
+
+                vSoc.push_back(s.soc.battery);
+                vSocIsys.push_back(s.soc.system);
+            }
+
+            currentBatteryPlot->setData(vIbat, vTime);
+            currentSystemPlot->setData(vISys, vTime);
+            currentPlatformPlot->setData(vIPlatform, vTime);
+
+            voltagePlot->setData(vBat, vTime);
+
+            socPlot->setData(vSoc, vTime);
+            socPlot->setSecondGraphData(vSocIsys, vTime);
+
             currentBatteryPlot->replotAll();
             currentSystemPlot->replotAll();
             currentPlatformPlot->replotAll();
             voltagePlot->replotAll();
             socPlot->replotAll();
 
-            // Set leds and texts in status bar
             setLed(ledPlaySimulationLabel, "green");
             statusPlaySimulationLabel->setText("Offline Done");
 
-            // Config Tab bar
             playBtn->setEnabled(false);
             configBtn->setEnabled(true);
             stopBtn->setEnabled(true);

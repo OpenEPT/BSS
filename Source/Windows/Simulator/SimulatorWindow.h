@@ -22,6 +22,44 @@ typedef enum simulationState_e{
     SIMULATION_PAUSED  = 3
 } simulationState_e;
 
+typedef struct SimulatorCurrent_t
+{
+    double system;
+    double battery;
+    double platform;
+} SimulatorCurrent_t;
+
+typedef struct SimulatorVoltage_t
+{
+    double battery;
+} SimulatorVoltage_t;
+
+typedef struct SimulatorSoC_t
+{
+    double system;
+    double battery;
+} SimulatorSoC_t;
+
+
+typedef struct SimulatorSample_t
+{
+    double time;
+
+    SimulatorCurrent_t current;
+    SimulatorVoltage_t voltage;
+    SimulatorSoC_t soc;
+
+    electricCharges_t electricCharge;
+} SimulatorSample_t;
+
+typedef struct SimulatorAlgoResult_t
+{
+    QString algoName;   // "K0", "K2", "Adaptive"
+    int algoId;
+
+    QVector<SimulatorSample_t> samples;
+} SimulatorAlgoResult_t;
+
 class SimulatorWnd : public QMainWindow
 {
     Q_OBJECT
@@ -92,6 +130,7 @@ private:
     QString ocvSOCPath;
     QString parametersPath;
     QString noisePath;
+    QString flagPath;
     QString selectedPlatform;
 
     // Leds Labels
@@ -105,8 +144,11 @@ private:
     // Progress Bar
     QProgressBar *progressBar;
 
-    // Simulator container (single entry point)
+    // Constructors
     SimulatorContainer *simulatorContainer;
+    BatteryModel *batteryModel;
+    PlatformCurrent *platformCurrent;
+    TimeTable *timeTable;
 
     // Timer
     QTimer *ledTimer;
@@ -114,15 +156,17 @@ private:
     QTimer *offlineTimer;
 
     simulationState_e currentSimState;
+    SimulatorAlgoResult_t simulatorAlgoResults;
 
     bool ledBlinkState = false;
     bool isOfflineMode = false;
     int timerPeriodMs;
     int currentSample;
-    float averageBatteryCurr = 0.0f;
-    float averageSystemCurr = 0.0f;
+    double averageBatteryCurr = 0.0;
+    double averageSystemCurr = 0.0;
     double initialSoC = 100.0;
     double endSoC = 0.0;
+    algoTimeTableDuration_e algoSelected = LP;
 };
 
 #endif // SIMULATORWND_H

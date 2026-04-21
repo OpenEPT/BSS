@@ -80,13 +80,11 @@ bool SimulatorInput::loadCurrentCSV(const QString &filePath)
         if (line.isEmpty()) continue;
 
         QStringList parts = line.split(",");
-        if (parts.size() < 2) continue;
+        if (parts.size() < 1) continue;
 
-        current_flag_e flag = parseFlag(parts[0]);
-        float current = parts[1].toFloat();
-        float time    = parts[2].toFloat();
+        float current = parts[0].toFloat();
+        float time    = parts[1].toFloat();
 
-        systemCurrFlags.append(flag);
         systemCurrent.append(current);
         systemTime.append(time);
 
@@ -177,6 +175,51 @@ bool SimulatorInput::loadParametersCSV(const QString &filePath)
     return true;
 }
 
+
+
+bool SimulatorInput::loadAlgoFlagsCSV(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open file:" << filePath;
+        emit loadError("Cannot open: " + filePath);
+        return false;
+    }
+
+    QTextStream in(&file);
+    in.readLine(); // Preskoči header (Flag,Exe)
+
+    algoFlags.clear();
+
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (line.isEmpty()) continue;
+
+        QStringList parts = line.split(",");
+        if (parts.size() < 2) continue; // Sigurnosna provera
+
+        algoFlags_t p; // Koristi ime strukture koje smo definisali
+
+        // 1. Konverzija String -> Enum (Flag)
+        QString flagStr = parts[0].trimmed().toUpper();
+        if (flagStr == "P") {
+            p.flag = P;
+        } else {
+            p.flag = N;
+        }
+
+        // 2. Konverzija String -> Int (Exe)
+        p.exe = parts[1].toInt();
+
+        algoFlags.append(p);
+    }
+
+    file.close();
+    qDebug() << "Loaded" << algoFlags.size() << "flags from" << filePath;
+    emit fileLoadedOcvCSV();
+    return true;
+}
+
 bool SimulatorInput::loadOcvCSV(const QString &filePath)
 {
     QFile file(filePath);
@@ -214,7 +257,6 @@ bool SimulatorInput::loadOcvCSV(const QString &filePath)
 const QVector<float>& SimulatorInput::getTime()    const { return systemTime; }
 const QVector<float>& SimulatorInput::getCurrent() const { return systemCurrent; }
 
-const QVector<current_flag_e>& SimulatorInput::getFlag() const { return systemCurrFlags; }
 QVector<double> SimulatorInput::getCoefficientOcvPoly() const
 {
     return systemCoeffcientOcvPoly;

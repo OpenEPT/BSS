@@ -13,11 +13,33 @@
 #include "Processing/Simulator/NoiseGenerator.h"
 
 
+typedef struct lastSimulationStepsValues{
+    double  lastIBat                 = 0.0;
+    double lastVBat                  = 0.0;
+    double  lastISys                 = 0.0;
+    double  lastIPlatform            = 0.0;
+    double  lastSoC                  = 0.0;
+    double  lastSoCIsys              = 0.0;
+    double lastElectricChargeBattery = 0.0;
+    double lastElectricChargeSystem  = 0.0;
+    double lastElectricChargeAlgo    = 0.0;
+} lastSimulationStepsValues;
+
+typedef struct electricCharges_t{
+    double electricChargeBattery;
+    double electricChargeSystem;
+    double electricChargeAlgo;
+} electricCharges_t;
+
 class SimulatorContainer : public QObject
 {
     Q_OBJECT
 public:
-    explicit SimulatorContainer(QObject *parent = nullptr);
+    explicit SimulatorContainer(BatteryModel    *sharedBatteryModel,
+                                PlatformCurrent *sharedPlatformCurrent,
+                                TimeTable       *sharedTimeTable,
+                                QObject *parent = nullptr);
+
     bool loadFiles();
     void proccesOffline();
     void step();
@@ -29,52 +51,59 @@ public:
     void setOcvPolyPath (const QString &p) { ocvPolyFilePath  = p;  }
     void setOcvSocPath  (const QString &p) { ocvSocFilePath   = p;  }
     void setNoisePath   (const QString &p) { noisePath        = p;  }
+    void setFlagsPath   (const QString &p) { flagPath         = p;}
     void setOfflineMode (bool val)         { offlineMode      = val;}
     void setPlatformCurrent(platform_current_mah_e platformCurrent) {platformCurr->setPlatformCurrent(platformCurrent);}
-    float  getTimeS()     const { return timeS; }
-    float  getIBat()      const { return lastIBat; }
-    double getVBat()      const { return lastVBat; }
-    float  getISys()      const { return lastISys; }
-    float  getIPlatform() const { return lastIPlatform; }
-    float  getSoC()       const { return lastSoC; }
-    float  getSoCIsys()       const { return lastSoCIsys; }
-    float  getElectricCharge() const {return lastElectricCharge;}
-    int getNumberOfSamples() const { return input->getNumberOfSamples(); }
+    void setAlgoSelected(algoTimeTableDuration_e algoSelected){algoSelectContainer = algoSelected;}
+    double  getTimeS()     const { return timeS; }
+    double  getIBat()      const { return lastValues.lastIBat; }
+    double  getVBat()      const { return lastValues.lastVBat; }
+    double  getISys()      const { return lastValues.lastISys; }
+    double  getIPlatform() const { return lastValues.lastIPlatform; }
+    double  getSoC()       const { return lastValues.lastSoC; }
+    double  getSoCIsys()       const { return lastValues.lastSoCIsys; }
+    double  getElectricChargeBattery() const {return lastValues.lastElectricChargeBattery;}
+    double  getElectricChargeSystem() const {return lastValues.lastElectricChargeSystem;}
+    lastSimulationStepsValues getLastValuesOfSimulationStep() const {return lastValues;}
+    int getNumberOfSamples() const { return inputProcessing->getNumberOfSamples(); }
 
 signals:
     void dataSample(float timeS, double vBat, float iSys, float iPlatform, float iBat, float socPct, float socIsysPct);
     void loadError(const QString &msg);
     void loadSuccess();
 private:
-    SimulatorInput          *input;
-    BatteryModel            *batteryModel;
+    // Owned by container:
+    SimulatorInput          *inputProcessing;
     VoltageEstimator        *voltageEstimator;
     SocReference            *socReference;
-    PlatformCurrent         *platformCurr;
     BatteryCurrentGenerator *batteryCurrGen;
-    TimeTable               *timeTable;
     Algo                    *algo;
     NoiseGenerator          *noiseGenerator;
-    int currentIndex;
-    float timeS;
-    double electricCharge;
 
-    // Last values after every step()
-    float  lastIBat          = 0.0f;
-    double lastVBat          = 0.0;
-    float  lastISys          = 0.0f;
-    float  lastIPlatform     = 0.0f;
-    float  lastSoC           = 0.0f;
-    float  lastSoCIsys       = 0.0f;
-    float lastElectricCharge = 0.0f;
+    // Shared - NOT owned by container:
+    BatteryModel            *batteryModel;
+    PlatformCurrent         *platformCurr;
+    TimeTable               *timeTable;
 
+
+    // OutputFiles
     QFile       *outputFile;
     QTextStream *outputStream;
+
+    // FilePaths
     QString currentFilePath;
     QString paramsFilePath;
     QString ocvPolyFilePath;
     QString ocvSocFilePath;
     QString noisePath;
-    bool offlineMode = false;
+    QString flagPath;
+
+    // Variables
+    algoTimeTableDuration_e algoSelectContainer; // Whitch algo
+    lastSimulationStepsValues lastValues;        // Values for every sample
+    bool offlineMode = false;                    // container Mode analysys
+    float timeS;                                 // Global time for simulation
+    electricCharges_t electricCharges;           // TODO: ovo ce se premestiti u algo block
+    int globalSampleIndex;                       // Global sample index for this containter
 };
 #endif // SIMULATORCONTAINER_H

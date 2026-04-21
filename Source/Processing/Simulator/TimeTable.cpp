@@ -1,17 +1,52 @@
 #include "TimeTable.h"
 
-
 TimeTable::TimeTable(algoTimeTableDuration_e whitchAlgo, QObject *p)
     : QObject(p)
+    , whitchAlgo(whitchAlgo)
+    , currentAlgo(whitchAlgo)
 {
-    this->whitchAlgo = whitchAlgo;
+}
+
+void TimeTable::onWitchAlgo(algoTimeTableDuration_e algo)
+{
+    whitchAlgo  = algo;
+    currentAlgo = algo;
+    int time = getTotalDuration(algo);
+    emit durationAlgo(time);
 }
 
 
-void TimeTable::onWitchAlgo(algoTimeTableDuration_e whitchAlgo){
-    this->whitchAlgo = whitchAlgo;
-    emit durationAlgo(this->whitchAlgo);
+int TimeTable::getPreProcessingSystemTime()  const {
+    return PREPROCESSING_SYSTEM_TIME;
+}
+
+int TimeTable::getPreProcessingUserTime()    const {
+    return PREPROCESSING_USER_TIME;
+}
+
+int TimeTable::getProcessingUserTime()       const {
+    return PROCESSING_USER_TIME;
+}
+
+int TimeTable::getPostProcessingSystemTime() const {
+    return POSTPROCESSING_SYSTEM_TIME;
+}
+
+int TimeTable::getPostProcessingUserTime()   const {
+    return POSTPROCESSING_USER_TIME;
 }
 
 
-algoTimeTableDuration_e  TimeTable::getWhitchAlgo() const {return whitchAlgo;}
+int TimeTable::getTotalDuration(algoTimeTableDuration_e algo) const {
+    return getPreProcessingSystemTime()
+           + getPreProcessingUserTime()
+           + getProcessingSystemTime(algo)
+           + getProcessingUserTime()
+           + getPostProcessingSystemTime()
+           + getPostProcessingUserTime();
+}
+
+algoTimeTableDuration_e TimeTable::getWhitchAlgo() const
+{
+    return currentAlgo;
+}

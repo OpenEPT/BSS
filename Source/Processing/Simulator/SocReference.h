@@ -13,17 +13,17 @@ public:
     explicit SocReference(QObject *parent = nullptr);
 
     void  socReferenceSet(double socReference);
-    void  setSocIsys(float socIsysCurrent);
-    float calculateRefSoC(float currA, float Ts);
-    float calculateRefSoCIsys(float currA, float Ts);
-    float getSoC()      const;
-    float getSocIsys()  const;
-    float getCapacity() const;
+    void  setSocIsys(double socIsysCurrent);
+    double calculateRefSoC(double currA, double Ts);
+    double calculateRefSoCIsys(double currA, double Ts);
+    double getSoC()      const;
+    double getSocIsys()  const;
+    double getCapacity() const;
 
 private:
-    float soC;
-    float socIsys;
-    float capacity;
+    double soC;
+    double socIsys;
+    double capacity;
 };
 
 #endif // SOCREFERENCE_H

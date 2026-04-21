@@ -71,6 +71,7 @@ private:
 
     bool        enableTracking;
     bool        replotActive;
+    bool        plot2Enabled;
     bool        scatterGraphAdded;
 
     void        setButtonStyle();

@@ -12,12 +12,12 @@ void SocReference::socReferenceSet(double socReference){
     soC = socReference;
 }
 
-void SocReference::setSocIsys(float socIsysCurrent){
+void SocReference::setSocIsys(double socIsysCurrent){
     socIsys = socIsysCurrent;
 }
 
 
-float SocReference::calculateRefSoC(float currA, float Ts)
+double SocReference::calculateRefSoC(double currA, double Ts)
 {
     soC -= (currA * Ts) / capacity;
 
@@ -28,7 +28,7 @@ float SocReference::calculateRefSoC(float currA, float Ts)
 }
 
 
-float SocReference::calculateRefSoCIsys(float currA, float Ts)
+double SocReference::calculateRefSoCIsys(double currA, double Ts)
 {
     socIsys -= (currA * Ts) / capacity;
 
@@ -38,17 +38,17 @@ float SocReference::calculateRefSoCIsys(float currA, float Ts)
     return socIsys;
 }
 
-float SocReference::getSoC() const
+double SocReference::getSoC() const
 {
     return soC;
 }
 
-float SocReference::getSocIsys() const
+double SocReference::getSocIsys() const
 {
     return socIsys;
 }
 
-float SocReference::getCapacity() const
+double SocReference::getCapacity() const
 {
     return capacity;
 }

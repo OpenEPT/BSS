@@ -5,9 +5,7 @@
 VoltageEstimator::VoltageEstimator(QObject *parent)
     : QObject{parent}
     , batteryModel(nullptr)
-    , vSlow(0.0)
-    , vFast(0.0)
-    , vTerminal(0.0)
+    , voltage{0.0, 0.0, 0.0}
 {
     iBat = 0;
 }
@@ -15,17 +13,11 @@ VoltageEstimator::VoltageEstimator(QObject *parent)
 void VoltageEstimator::voltageEstimatorInit(BatteryModel *model)
 {
     batteryModel = model;
-    vSlow        = 0.0;
-    vFast        = 0.0;
-    vTerminal    = 0.0;
+    voltage.vSlow        = 0.0;
+    voltage.vFast        = 0.0;
+    voltage.vTerminal    = 0.0;
 }
 
-// Dual RC model:
-//   alphaSlow = exp(-Ts / (rSlow * cSlow))
-//   alphaFast = exp(-Ts / (rFast * cFast))
-//   vSlow[k]  = (vSlow[k-1] - I*rSlow) * alphaSlow + I*rSlow
-//   vFast[k]  = (vFast[k-1] - I*rFast) * alphaFast + I*rFast
-//   vTerminal = OCV - I*rInternal - vSlow - vFast
 void VoltageEstimator::calculateTerminalVoltage(float iSys, float iPlatform, float iBat, float Ts)
 {
     if (!batteryModel) {
@@ -38,16 +30,16 @@ void VoltageEstimator::calculateTerminalVoltage(float iSys, float iPlatform, flo
     double alphaSlow = std::exp(-Ts / (params.rSlow * params.cSlow));
     double alphaFast = std::exp(-Ts / (params.rFast * params.cFast));
 
-    vSlow = (vSlow - iBat * params.rSlow) * alphaSlow + iBat * params.rSlow;
-    vFast = (vFast - iBat * params.rFast) * alphaFast + iBat * params.rFast;
+    voltage.vSlow = (voltage.vSlow - iBat * params.rSlow) * alphaSlow + iBat * params.rSlow;
+    voltage.vFast = (voltage.vFast - iBat * params.rFast) * alphaFast + iBat * params.rFast;
 
     double ocv = batteryModel->getOcv();
 
-    vTerminal = ocv - iBat * params.rInternal - vSlow - vFast;
+    voltage.vTerminal = ocv - iBat * params.rInternal - voltage.vSlow - voltage.vFast;
 
-    emit terminalVoltageCalculated(vTerminal, iSys, iPlatform, iBat, batteryModel->getSoC());
+    emit terminalVoltageCalculated(voltage.vTerminal, iSys, iPlatform, iBat, batteryModel->getSoC());
 }
 
-double VoltageEstimator::getVTerminal() const { return vTerminal; }
-double VoltageEstimator::getVSlow()     const { return vSlow; }
-double VoltageEstimator::getVFast()     const { return vFast; }
+double VoltageEstimator::getVTerminal() const { return voltage.vTerminal; }
+double VoltageEstimator::getVSlow()     const { return voltage.vSlow; }
+double VoltageEstimator::getVFast()     const { return voltage.vFast; }
