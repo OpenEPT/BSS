@@ -57,6 +57,7 @@ typedef struct algoTab_t {
 
     // Unique per tab:
     SimulatorContainer *container = nullptr;
+    BatteryModel *batteryModel = nullptr;
 
     // Collected data vectors
     SimulatorSample_t simulatorSample;
@@ -115,7 +116,6 @@ private:
     QPushButton *pauseBtn;
     QPushButton *loadBtn;
     QPushButton *speedUpBtn;
-    QPushButton *test;
     QToolButton *logInfoBtn;
     QToolButton *configBtn;
 

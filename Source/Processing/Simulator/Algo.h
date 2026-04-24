@@ -50,15 +50,15 @@ public:
     void              algoReset();
 
     algoCurrentInfo_t preProcessing();
-    void              processing();
+    void              processing(double iBat);
     void              postProcessing();
 
     algoCurrentInfo_t preProcessingSystem();
-    void              processingSystem();
+    void              processingSystem(double iBat);
     void              postProcessingSystem();
 
     void              preProcessingUser();
-    void              processingUser();
+    void              processingUser(double iBat);
     void              postProcessingUser();
 
     float             getQBath();
@@ -93,6 +93,10 @@ private:
     int             ppCycles                     = 0;
     float           algoDurationPerSample        = 0.0f;
     float           qBath                        = 0.0f;
+
+
+    // User Algo
+    float           algoSocOutput                = 1.0f;
 };
 
 #endif // ALGO_H

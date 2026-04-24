@@ -218,7 +218,6 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     logInfoBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/info_button.png"));
     logInfoBtn->setFixedSize(30, 30);
 
-
     playBtn->setEnabled(false);
     stopBtn->setEnabled(false);
     pauseBtn->setEnabled(false);
@@ -232,7 +231,6 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     tabToolBar->addWidget(speedUpBtn);
     tabToolBar->addWidget(configBtn);
     tabToolBar->addWidget(logInfoBtn);
-
     /* Tab bar *****************************************************************/
     tabBar = new QTabBar(this);
     tabBar->setExpanding(false);
@@ -434,6 +432,7 @@ void SimulatorWnd::clearAlgoTabs()
     // Delete containers (owned objects)
     for (auto &tab : algoTabs) {
         delete tab.container;
+        delete tab.batteryModel;
     }
     algoTabs.clear();
     tabBar->setVisible(false);
@@ -744,8 +743,10 @@ void SimulatorWnd::onConfigClicked()
             tab.algo     = algo;
             tab.algoName = algoTabName(algo);
 
+            BatteryModel *tabBatteryModel = new BatteryModel(this);
+
             tab.container = new SimulatorContainer(
-                batteryModel, platformCurrent, timeTable, this);
+                tabBatteryModel, platformCurrent, timeTable, this);
 
             tab.container->setCurrentPath(currPath);
             tab.container->setOcvPolyPath(polynomsPath);
@@ -846,6 +847,7 @@ void SimulatorWnd::onLogInfoClicked()
 /*******************************************************************************
  * onPlayClicked
  ******************************************************************************/
+
 
 void SimulatorWnd::onPlayClicked()
 {

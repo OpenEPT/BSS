@@ -34,9 +34,9 @@ algoCurrentInfo_t Algo::preProcessing(){
 }
 
 
-void Algo::processing(){
-    processingSystem();
-    processingUser();
+void Algo::processing(double iBat){
+    processingSystem(iBat);
+    processingUser(iBat);
 }
 
 
@@ -88,7 +88,7 @@ algoCurrentInfo_t Algo::preProcessingSystem()
     return algoCurrentInfo;
 }
 
-void Algo::processingSystem()
+void Algo::processingSystem(double iBat)
 {
     if (!ppSignalReady || !veReady) return;
 
@@ -115,8 +115,7 @@ void Algo::processingSystem()
         algoStates.postprocessing = ALGO_POSTPROCESSING_RUNNING;
     }
 
-    // Call Post Processing
-    postProcessing();
+    processingUser(iBat);
 }
 
 
@@ -143,7 +142,18 @@ void Algo::postProcessingSystem()
 
 /*********** Algo User processing functions *******************/
 void Algo::preProcessingUser(){}
-void Algo::processingUser(){}
+void Algo::processingUser(double iBat){
+    if (!latch) return;  // ← N flag,
+
+    // P flag - integrisi iBat
+    algoSocOutput -= (iBat * 0.01f) / (457.0f * 3.6f);
+
+    if (algoSocOutput < 0.0f) algoSocOutput = 0.0f;
+    if (algoSocOutput > 1.0f) algoSocOutput = 1.0f;
+
+    // Call Post Processing
+    postProcessing();
+}
 void Algo::postProcessingUser(){}
 
 
@@ -177,10 +187,10 @@ void Algo::onAlgoDuration(int duration)
 
 void Algo::onVoltageEstimatorDone(double vBat, float iSys, float iPlatform, double iBat, float soc)
 {
-    Q_UNUSED(vBat) Q_UNUSED(iSys) Q_UNUSED(iPlatform) Q_UNUSED(iBat) Q_UNUSED(soc)
+    Q_UNUSED(vBat) Q_UNUSED(iSys) Q_UNUSED(iPlatform) Q_UNUSED(soc)
 
     veReady = true;     // Set Vrdy
-    processing();       // Call processing system
+    processing(iBat);       // Call processing system
 }
 
 algoTimeTableDuration_e Algo::intToAlgoDuration(int index)
