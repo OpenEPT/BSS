@@ -39,10 +39,6 @@ typedef struct SimulatorSoC_t {
     QVector<double> battery;
 } SimulatorSoC_t;
 
-typedef struct SimulatorAverageValues_t{
-    SimulatorCurrent_t averageCurrent;
-    SimulatorVoltage_t averageVoltage;
-} SimulatorAverageValues_t;
 
 typedef struct SimulatorSample_t {
     QVector<double>    time;
@@ -50,7 +46,6 @@ typedef struct SimulatorSample_t {
     SimulatorVoltage_t voltage;
     SimulatorSoC_t     soc;
     electricCharges_t  electricCharge;
-    SimulatorAverageValues_t average;
 } SimulatorSample_t;
 
 /*******************************************************************************
@@ -97,6 +92,13 @@ private slots:
                 const QString &color = "None",
                 simulationState_e simulationState = SIMULATION_UNINIT);
 
+    QTableWidget* createResultsTable(double avgBat,
+                                    double avgSys,
+                                    lastSimulationStepsValues finalResults,
+                                    float timeElapsed,
+                                    int totalSamples,
+                                    const QString &algoName);
+
 signals:
     void sigPlay();
     void sigStop();
@@ -113,6 +115,7 @@ private:
     QPushButton *pauseBtn;
     QPushButton *loadBtn;
     QPushButton *speedUpBtn;
+    QPushButton *test;
     QToolButton *logInfoBtn;
     QToolButton *configBtn;
 

@@ -51,7 +51,7 @@ public:
     void setOcvSocPath     (const QString &p) { ocvSocFilePath  = p;  }
     void setNoisePath      (const QString &p) { noisePath       = p;  }
     void setFlagsPath      (const QString &p) { flagPath        = p;  }
-    void setOutputPath     (const QString &p) { outputFilePath  = p;  }   // ← NEW
+    void setOutputPath     (const QString &p) { outputFilePath  = p;  }
     void setOfflineMode    (bool val)         { offlineMode     = val;}
     void setPlatformCurrent(platform_current_mah_e pc) { platformCurr->setPlatformCurrent(pc); }
     void setAlgoSelected   (algoTimeTableDuration_e a) { algoSelectContainer = a; }
