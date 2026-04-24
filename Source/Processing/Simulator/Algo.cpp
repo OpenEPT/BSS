@@ -66,6 +66,7 @@ algoCurrentInfo_t Algo::preProcessingSystem()
 
     // If latched - always output P regardless of what vector says
     if (latch) {
+        algoPeriod++;
         calculateExeTimeInProcessing = false;
         latch         = true;
         ppSignalReady = true;
@@ -74,13 +75,17 @@ algoCurrentInfo_t Algo::preProcessingSystem()
     }
 
     // P flag: self-latch and signal processing
-    if (lastFlag == N && currentFlag == P) {
+    if (currentFlag == P && !latch) {
         calculateExeTimeInProcessing = true;
         latch         = true;
         ppSignalReady = true;
         algoState     = ALGO_WAITING_VE;
         algoStates.preprocessing = ALGO_PREPROCESSING_ACTIVE;
         emit requestPlatformCurrent();
+    }
+
+    if(currentFlag != P){
+        algoPeriod++;
     }
 
     lastFlag             = currentFlag;
@@ -114,8 +119,6 @@ void Algo::processingSystem(double iBat)
         algoStates.processing     = ALGO_PROCESSING_IDLE;
         algoStates.postprocessing = ALGO_POSTPROCESSING_RUNNING;
     }
-
-    processingUser(iBat);
 }
 
 
@@ -128,6 +131,7 @@ void Algo::postProcessingSystem()
     qBath += (algoDurationPerSample * algoCurrentInfo.currentPlatform) / 3.6f; // [mAh]
 
     if (ppCounter >= ppCycles) {
+        algoPeriod = 1;
         algoDurationPerSample     = 0.0f;
         latch                     = false;
         ppCounter                 = 0;
@@ -142,11 +146,12 @@ void Algo::postProcessingSystem()
 
 /*********** Algo User processing functions *******************/
 void Algo::preProcessingUser(){}
-void Algo::processingUser(double iBat){
+
+void Algo::processingUser(float iBat){
     if (!latch) return;  // ← N flag,
 
-    // P flag - integrisi iBat
-    algoSocOutput -= (iBat * 0.01f) / (457.0f * 3.6f);
+    // P flag - Calculate Coulomb Counter
+    algoSocOutput -= (iBat * (static_cast<float>(algoPeriod) * 0.01f)) / (457.0f * 3.6f);
 
     if (algoSocOutput < 0.0f) algoSocOutput = 0.0f;
     if (algoSocOutput > 1.0f) algoSocOutput = 1.0f;

@@ -37,6 +37,7 @@ typedef struct SimulatorVoltage_t {
 typedef struct SimulatorSoC_t {
     QVector<double> system;
     QVector<double> battery;
+    QVector<double> algoSoc;
 } SimulatorSoC_t;
 
 
@@ -87,6 +88,7 @@ private slots:
     void onTabChanged(int index);
     void redistributeDocks();
     void startOfflineSimulation();
+    void replotCompareTab();
     double getSimulationEndSoC()  { return endSoC;     }
     double getSimulationInitSoC() { return initialSoC; }
     void setLed(QLabel *led,

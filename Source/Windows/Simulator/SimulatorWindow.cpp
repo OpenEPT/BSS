@@ -231,6 +231,7 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     tabToolBar->addWidget(speedUpBtn);
     tabToolBar->addWidget(configBtn);
     tabToolBar->addWidget(logInfoBtn);
+
     /* Tab bar *****************************************************************/
     tabBar = new QTabBar(this);
     tabBar->setExpanding(false);
@@ -425,11 +426,9 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
  ******************************************************************************/
 void SimulatorWnd::clearAlgoTabs()
 {
-    // Remove all tabs from bar
     while (tabBar->count() > 0)
         tabBar->removeTab(0);
 
-    // Delete containers (owned objects)
     for (auto &tab : algoTabs) {
         delete tab.container;
         delete tab.batteryModel;
@@ -448,12 +447,26 @@ void SimulatorWnd::replotActiveTab()
 
     const algoTab_t &tab = algoTabs[idx];
 
+    // Reset on 2 graphs
+    socPlot->clearAllGraphs();
+    socPlot->addLineGraph(QColor(255, 100, 0), "SoC System");  // graph(1)
+    socPlot->setGraphName(0, "SoC Battery"); // graph(0)
+    socPlot->setData(tab.simulatorSample.soc.battery, tab.simulatorSample.time);
+    socPlot->setSecondGraphData(tab.simulatorSample.soc.system, tab.simulatorSample.time);
+
+    // Other plots
+    voltagePlot->clearAllGraphs();
+    currentBatteryPlot->clearAllGraphs();
+    currentSystemPlot->clearAllGraphs();
+    currentPlatformPlot->clearAllGraphs();
+
+    voltagePlot->enableLegend(false);
+    currentBatteryPlot->enableLegend(false);
+
     currentBatteryPlot->setData (tab.simulatorSample.current.battery,  tab.simulatorSample.time);
     currentSystemPlot->setData  (tab.simulatorSample.current.system,   tab.simulatorSample.time);
     currentPlatformPlot->setData(tab.simulatorSample.current.platform, tab.simulatorSample.time);
     voltagePlot->setData        (tab.simulatorSample.voltage.battery,  tab.simulatorSample.time);
-    socPlot->setData            (tab.simulatorSample.soc.battery,      tab.simulatorSample.time);
-    socPlot->setSecondGraphData (tab.simulatorSample.soc.system,       tab.simulatorSample.time);
 
     currentBatteryPlot->replotAll();
     currentSystemPlot->replotAll();
@@ -462,15 +475,81 @@ void SimulatorWnd::replotActiveTab()
     socPlot->replotAll();
 }
 
+
+void SimulatorWnd::replotCompareTab()
+{
+    static const QList<QColor> colors = {
+        QColor(40,  110, 255), QColor(255, 100,   0), QColor(0,   180,   0),
+        QColor(180,   0, 180), QColor(255,   0,   0), QColor(0,   200, 200),
+        QColor(255, 200,   0), QColor(0,   100, 100), QColor(255,   0, 150),
+        QColor(100, 100,   0), QColor(0,    50, 200), QColor(200, 100,  50),
+        QColor(100, 200,   0), QColor(200,   0,  50), QColor(0,   150, 255),
+        QColor(150,   0, 255), QColor(255, 150,   0), QColor(0,   200, 100),
+        QColor(200, 200,   0), QColor(100,   0, 200),
+    };
+
+    socPlot->clearAllGraphs();
+    voltagePlot->clearAllGraphs();
+    currentBatteryPlot->clearAllGraphs();
+
+    // Omogući legendu za SoC plot
+    socPlot->enableLegend(true);
+    voltagePlot->enableLegend(true);
+    currentBatteryPlot->enableLegend(true);
+
+    // graph(0) = SoCIsys - sivi, tačkasta
+    socPlot->setGraphLineStyle(0, Qt::DotLine, QColor(0, 0, 0), "SoC Isys");
+    socPlot->setGraphData(0, algoTabs[0].simulatorSample.soc.system,
+                          algoTabs[0].simulatorSample.time);
+
+    int graphIdx = 1;
+    for (int i = 0; i < algoTabs.size(); i++) {
+        const algoTab_t &tab = algoTabs[i];
+        QColor colorAlgo     = colors[i % colors.size()];
+        QColor colorSoCBat   = colorAlgo.lighter(140);
+
+        // SoCBat - isprekidana
+        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine);
+        socPlot->setGraphData(graphIdx, tab.simulatorSample.soc.battery,
+                              tab.simulatorSample.time);
+        graphIdx++;
+
+        // AlgoSoC - puna
+        socPlot->addLineGraph(colorAlgo, tab.algoName + " AlgoSoC");
+        socPlot->setGraphData(graphIdx, tab.simulatorSample.soc.algoSoc,
+                              tab.simulatorSample.time);
+        graphIdx++;
+
+        // Voltage i Current
+        if (i == 0) {
+            voltagePlot->setGraphName(0, tab.algoName);
+            voltagePlot->setData(tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
+            currentBatteryPlot->setGraphName(0, tab.algoName);
+            currentBatteryPlot->setData(tab.simulatorSample.current.battery, tab.simulatorSample.time);
+        } else {
+            voltagePlot->addLineGraph(colorAlgo, tab.algoName);
+            voltagePlot->setGraphData(i, tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
+            currentBatteryPlot->addLineGraph(colorAlgo, tab.algoName);
+            currentBatteryPlot->setGraphData(i, tab.simulatorSample.current.battery, tab.simulatorSample.time);
+        }
+    }
+
+    socPlot->replotAll();
+    voltagePlot->replotAll();
+    currentBatteryPlot->replotAll();
+}
+
 /*******************************************************************************
  * onTabChanged
  ******************************************************************************/
 void SimulatorWnd::onTabChanged(int index)
 {
-    Q_UNUSED(index)
+    if (index == algoTabs.size()) {
+        replotCompareTab();
+        return;
+    }
     replotActiveTab();
 }
-
 /*******************************************************************************
  * onTimerTick - online mode
  ******************************************************************************/
@@ -766,6 +845,9 @@ void SimulatorWnd::onConfigClicked()
             tabBar->addTab(tab.algoName);
         }
 
+        // Always exists output Tab
+        tabBar->addTab("Output Simulation");
+
         // Load files for all
         for (auto &tab : algoTabs) {
             if (!tab.container->loadFiles()) return;
@@ -886,11 +968,11 @@ void SimulatorWnd::onStopClicked()
         simulatorContainer->reset(initialSoC);
     }
 
-    currentBatteryPlot->clear();
-    currentSystemPlot->clear();
-    currentPlatformPlot->clear();
-    voltagePlot->clear();
-    socPlot->clear();
+    currentBatteryPlot->clearAllGraphs();
+    currentSystemPlot->clearAllGraphs();
+    currentPlatformPlot->clearAllGraphs();
+    voltagePlot->clearAllGraphs();
+    socPlot->clearAllGraphs();
 
     if (!isOfflineMode) {
         speedUpBtn->setText("1x");
@@ -971,13 +1053,14 @@ void SimulatorWnd::startOfflineSimulation()
         algoTabs[i].simulatorSample.current.platform.clear();
         algoTabs[i].simulatorSample.soc.battery.clear();
         algoTabs[i].simulatorSample.soc.system.clear();
+        algoTabs[i].simulatorSample.soc.algoSoc.clear();
 
         QtConcurrent::run([this, i, tabCount, finishedCount]()
           {
               SimulatorContainer *container = algoTabs[i].container;
               double endSocPct = endSoC * 100.0;
 
-              QVector<double> vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys;
+              QVector<double> vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys, vAlgoSoc;
               double avgBat = 0.0, avgSys = 0.0;
               int localSample = 0;
 
@@ -992,6 +1075,7 @@ void SimulatorWnd::startOfflineSimulation()
                   vIPlatform.push_back(container->getIPlatform());
                   vSoc.push_back(soc);
                   vSocIsys.push_back(container->getSoCIsys());
+                  vAlgoSoc.push_back(container->getAlgoSoc() * 100.0);
 
                   avgBat += container->getIBat();
                   avgSys += container->getISys();
@@ -1013,7 +1097,7 @@ void SimulatorWnd::startOfflineSimulation()
               // Back to main thread: store data and replot if active tab
               QMetaObject::invokeMethod(this,
                                         [this, i, avgBat, avgSys,
-                                         vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys,
+                                         vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys, vAlgoSoc,
                                          tabCount, finishedCount]()
                 {
                     algoTabs[i].avgBatteryCurr                   = avgBat;
@@ -1025,6 +1109,7 @@ void SimulatorWnd::startOfflineSimulation()
                     algoTabs[i].simulatorSample.current.platform = vIPlatform;
                     algoTabs[i].simulatorSample.soc.battery      = vSoc;
                     algoTabs[i].simulatorSample.soc.system       = vSocIsys;
+                    algoTabs[i].simulatorSample.soc.algoSoc      = vAlgoSoc;
 
                     // If this tab is currently visible, replot immediately
                     if (tabBar->currentIndex() == i)

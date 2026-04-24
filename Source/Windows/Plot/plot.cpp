@@ -398,11 +398,10 @@ void Plot::setReplotActive(bool active)
 
 void Plot::replotAll()
 {
-    plot->graph(0)->setData(xData, yData, true);
-    if (plot->graphCount() > 1 && !xData2.isEmpty())
-        plot->graph(1)->setData(xData2, yData2, true);
-    plot->yAxis->rescale(true);
-    plot->xAxis->rescale(true);
+    if (!xData.isEmpty())
+        plot->graph(0)->setData(xData, yData, true);
+
+    plot->rescaleAxes(true);
     plot->replot();
 }
 
@@ -438,4 +437,59 @@ void Plot::appendData2(QVector<double> data, QVector<double> keys)
     plot->yAxis->rescale(true);
     plot->xAxis->rescale(true);
     plot->replot();
+}
+
+void Plot::clearAllGraphs()
+{
+    // Ukloni sve grafove
+    while (plot->graphCount() > 0)
+        plot->removeGraph(0);
+
+    // Dodaj nazad graph(0)
+    plot->addGraph();
+    plot->graph(0)->setPen(QPen(QColor(40, 110, 255)));
+
+    xData.clear();  yData.clear();
+    xData2.clear(); yData2.clear();
+    plot->replot();
+}
+
+void Plot::setGraphData(int graphIndex, QVector<double> data, QVector<double> keys)
+{
+    if (graphIndex >= plot->graphCount()) return;
+    plot->graph(graphIndex)->setData(keys, data, true);
+    plot->rescaleAxes(true);
+    plot->replot();
+}
+
+void Plot::addLineGraphWithStyle(QColor color, QString name, Qt::PenStyle style, int width)
+{
+    plot->addGraph();
+    int idx = plot->graphCount() - 1;
+    QPen pen(color);
+    pen.setStyle(style);
+    pen.setWidth(width);
+    plot->graph(idx)->setPen(pen);
+    if (!name.isEmpty())
+        plot->graph(idx)->setName(name);
+    if (plot->legend)
+        plot->legend->setVisible(true);
+}
+
+void Plot::enableLegend(bool enable)
+{
+    plot->legend->setVisible(enable);
+    plot2Enabled = enable;
+    plot->replot();
+}
+
+void Plot::setGraphLineStyle(int graphIndex, Qt::PenStyle style, QColor color, const QString &name)
+{
+    if (graphIndex >= plot->graphCount()) return;
+    QPen pen(color);
+    pen.setStyle(style);
+    pen.setWidth(1);
+    plot->graph(graphIndex)->setPen(pen);
+    if (!name.isEmpty())
+        plot->graph(graphIndex)->setName(name);
 }

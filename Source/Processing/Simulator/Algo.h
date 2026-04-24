@@ -58,10 +58,14 @@ public:
     void              postProcessingSystem();
 
     void              preProcessingUser();
-    void              processingUser(double iBat);
+    void              processingUser(float iBat);
     void              postProcessingUser();
 
     float             getQBath();
+
+
+    // User getters
+    float getAlgoSoCOutput() const {return algoSocOutput;}
 
 public slots:
     void onPlatformCurrentReady(double currentA);
@@ -93,10 +97,11 @@ private:
     int             ppCycles                     = 0;
     float           algoDurationPerSample        = 0.0f;
     float           qBath                        = 0.0f;
+    int             algoPeriod                   = 0;
 
 
     // User Algo
-    float           algoSocOutput                = 1.0f;
+    double           algoSocOutput               = 1.0;
 };
 
 #endif // ALGO_H

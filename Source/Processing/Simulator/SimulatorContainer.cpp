@@ -190,7 +190,7 @@ void SimulatorContainer::step()
         iSysA = currVec[globalSampleIndex] / 1000.0;
 
     // Superimpose the noise and current
-    iSysA += noise.currentNoise;
+    //iSysA += noise.currentNoise;
 
     // Take time in seconds
     if (globalSampleIndex < timeVec.size())
@@ -245,6 +245,7 @@ void SimulatorContainer::step()
     lastValues.lastElectricChargeBattery = electricCharges.electricChargeBattery;
     lastValues.lastElectricChargeSystem  = electricCharges.electricChargeSystem;
     lastValues.lastElectricChargeAlgo    = electricCharges.electricChargeAlgo;
+    lastValues.lastUserSocAlgoOutput     = algo->getAlgoSoCOutput();
 
     globalSampleIndex++;
 }

@@ -22,6 +22,9 @@ typedef struct lastSimulationStepsValues{
     double lastElectricChargeBattery = 0.0;
     double lastElectricChargeSystem  = 0.0;
     double lastElectricChargeAlgo    = 0.0;
+
+    // User Algo soc return
+    double lastUserSocAlgoOutput     = 0.0;
 } lastSimulationStepsValues;
 
 typedef struct electricCharges_t{
@@ -66,6 +69,7 @@ public:
     double getSoCIsys()     const { return lastValues.lastSoCIsys; }
     double getElectricChargeBattery() const { return lastValues.lastElectricChargeBattery; }
     double getElectricChargeSystem()  const { return lastValues.lastElectricChargeSystem;  }
+    double getAlgoSoc() const {return lastValues.lastUserSocAlgoOutput;}
     lastSimulationStepsValues getLastValuesOfSimulationStep() const { return lastValues; }
     int    getNumberOfSamples() const { return inputProcessing->getNumberOfSamples(); }
 

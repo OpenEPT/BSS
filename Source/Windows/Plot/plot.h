@@ -31,6 +31,12 @@ public:
     void        clear();
     void setReplotActive(bool active);
     void replotAll();
+    void clearAllGraphs();
+    void enableLegend(bool enable);
+    void addLineGraphWithStyle(QColor color, QString name, Qt::PenStyle style, int width = 1);
+    void setGraphLineStyle(int graphIndex, Qt::PenStyle style, QColor color, const QString &name);
+    void setGraphData(int graphIndex, QVector<double> data, QVector<double> keys);
+    int  graphCount() { return plot->graphCount(); }
 
 signals:
 
