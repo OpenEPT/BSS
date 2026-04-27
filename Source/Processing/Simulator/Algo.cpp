@@ -36,7 +36,13 @@ algoCurrentInfo_t Algo::preProcessing(){
 
 void Algo::processing(double iBat){
     processingSystem(iBat);
-    processingUser(iBat);
+
+    if (currentFlag == P){
+        processingUser(iBat);
+    }
+
+    // Call Post Processing
+    postProcessing();
 }
 
 
@@ -50,46 +56,76 @@ void Algo::postProcessing(){
 
 algoCurrentInfo_t Algo::preProcessingSystem()
 {
-    // Always increment position in vector
-    current_flag_e currentFlag = N;
-
+    // Take every step current and previous flag
     if (currentDynIndex < algoDynamics.size()) {
+
         if (remainingSteps > 0) {
             currentFlag = algoDynamics[currentDynIndex - 1].flag;
             remainingSteps--;
         } else {
-            currentFlag    = algoDynamics[currentDynIndex].flag;
+
+            currentFlag = algoDynamics[currentDynIndex].flag;
+
+            if (currentDynIndex == 0) {
+                previousFlag = N;
+            } else {
+                previousFlag = algoDynamics[currentDynIndex - 1].flag;
+            }
+
             remainingSteps = algoDynamics[currentDynIndex].exe - 1;
-            currentDynIndex++;
+
+            if (currentDynIndex >= 2) {
+                lastRemainingSteps = algoDynamics[currentDynIndex - 2].exe;
+            } else {
+                lastRemainingSteps = 0;
+            }
+
+            lastRemainingSteps = currentDynIndex++;
         }
     }
 
     // If latched - always output P regardless of what vector says
-    if (latch) {
-        algoPeriod++;
+    if (ppDone) {
+
+        if ((currentFlag != P && previousFlag == N) || (currentFlag != P)) {
+            algoPeriod++;
+        }
+
         calculateExeTimeInProcessing = false;
-        latch         = true;
-        ppSignalReady = true;
         algoCurrentInfo.flag = P;
+
+        return algoCurrentInfo; // BCG request flag
+    }
+
+    if ((currentFlag != P && previousFlag == P)) {
+
+        algoPeriod = 0;
+        lastFlag = previousFlag;
+
+        algoCurrentInfo.flag = lastFlag;
+
+        calculateExeTimeInProcessing = true;
+        ppDone = true;
+
         return algoCurrentInfo;
     }
 
     // P flag: self-latch and signal processing
-    if (currentFlag == P && !latch) {
+    if (currentFlag == P && !ppDone) {
+
         calculateExeTimeInProcessing = true;
-        latch         = true;
+        ppDone = true;
         ppSignalReady = true;
-        algoState     = ALGO_WAITING_VE;
+
+        algoState = ALGO_WAITING_VE;
         algoStates.preprocessing = ALGO_PREPROCESSING_ACTIVE;
+
         emit requestPlatformCurrent();
     }
 
-    if(currentFlag != P){
-        algoPeriod++;
-    }
+    lastFlag = currentFlag;
+    algoCurrentInfo.flag = ppDone ? P : currentFlag;
 
-    lastFlag             = currentFlag;
-    algoCurrentInfo.flag = latch ? P : currentFlag;
     return algoCurrentInfo;
 }
 
@@ -113,32 +149,30 @@ void Algo::processingSystem(double iBat)
 
         // Trigger TimeTable → onAlgoDuration → ppCycles
         emit getWitchAlgo(algo);
-
-        ppCounter                 = 0;
-        algoState                 = ALGO_POSTPROCESSING;
-        algoStates.processing     = ALGO_PROCESSING_IDLE;
-        algoStates.postprocessing = ALGO_POSTPROCESSING_RUNNING;
     }
 }
 
 
 void Algo::postProcessingSystem()
 {
-    if (algoState != ALGO_POSTPROCESSING) return;
-
     ppCounter++;
 
     qBath += (algoDurationPerSample * algoCurrentInfo.currentPlatform) / 3.6f; // [mAh]
 
-    if (ppCounter >= ppCycles) {
+    if(nextCycleResetAlgoPeriod){
+        nextCycleResetAlgoPeriod  = false;
         algoPeriod = 1;
-        algoDurationPerSample     = 0.0f;
-        latch                     = false;
+    }
+
+    if (ppCounter >= ppCycles) {
+
+        nextCycleResetAlgoPeriod = true;;
+        ppDone                   = false;
+
         ppCounter                 = 0;
         ppCycles                  = 0;
-        algoState                 = ALGO_INACTIVE;
-        algoStates.preprocessing  = ALGO_PREPROCESSING_INACTIVE;
-        algoStates.postprocessing = ALGO_POSTPROCESSING_DONE;
+        algoDurationPerSample     = 0.0f;
+
         emit preprocessingDone();
     }
 }
@@ -148,7 +182,6 @@ void Algo::postProcessingSystem()
 void Algo::preProcessingUser(){}
 
 void Algo::processingUser(float iBat){
-    if (!latch) return;  // ← N flag,
 
     // P flag - Calculate Coulomb Counter
     algoSocOutput -= (iBat * (static_cast<float>(algoPeriod) * 0.01f)) / (457.0f * 3.6f);
@@ -156,8 +189,6 @@ void Algo::processingUser(float iBat){
     if (algoSocOutput < 0.0f) algoSocOutput = 0.0f;
     if (algoSocOutput > 1.0f) algoSocOutput = 1.0f;
 
-    // Call Post Processing
-    postProcessing();
 }
 void Algo::postProcessingUser(){}
 

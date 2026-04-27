@@ -87,17 +87,24 @@ private:
     algoCurrentInfo_t         algoCurrentInfo;
 
     current_flag_e  lastFlag                     = N;
+    current_flag_e  currentFlag                  = N;
+    current_flag_e  previousFlag                 = N;
+
     bool            calculateExeTimeInProcessing = false;
-    bool            latch                        = false;
     bool            ppSignalReady                = false;
     bool            veReady                      = false;
+    bool            ppDone                       = false;
+    bool            nextCycleResetAlgoPeriod     = false;
+
     int             currentDynIndex              = 0;
     int             remainingSteps               = 0;
+    int             lastRemainingSteps           = 0;
     int             ppCounter                    = 0;
     int             ppCycles                     = 0;
+    int             algoPeriod                   = 1;
+
     float           algoDurationPerSample        = 0.0f;
     float           qBath                        = 0.0f;
-    int             algoPeriod                   = 0;
 
 
     // User Algo
