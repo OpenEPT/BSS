@@ -296,25 +296,29 @@ void        Plot::setTitle(QString aTitle)
 }
 void Plot::clear()
 {
-    plot->graph(0)->data()->clear();
-    if(plot2Enabled)
-    {
+    if (plot->graphCount() > 0)
+        plot->graph(0)->data()->clear();
+
+    if (plot2Enabled && plot->graphCount() > 1) {
         plot->graph(1)->data()->clear();
-        for(int i = 0; i < textData.size(); i++)
+        for (int i = 0; i < textData.size(); i++)
             plot->removeItem(textData[i]);
+        textData.clear();
     }
+
     xData.clear();
     yData.clear();
     xData2.clear();
     yData2.clear();
-    plot->replot();
     epDataKey.clear();
     epDataName.clear();
     plotXData.clear();
     plotYData.clear();
+
     plot->xAxis->setRange(0, 1000);
     plot->replot();
 }
+
 void        Plot::onZoomIn()
 {
     plot->setInteraction(QCP::iRangeDrag, true);
@@ -409,7 +413,9 @@ void Plot::addLineGraph(QColor color, QString name)
 {
     plot->addGraph();
     int idx = plot->graphCount() - 1;
-    plot->graph(idx)->setPen(QPen(color));
+    QPen pen(color);
+    pen.setWidth(PLOT_LINE_WIDTH);
+    plot->graph(idx)->setPen(pen);
     if (!name.isEmpty())
         plot->graph(idx)->setName(name);
 }
@@ -468,7 +474,7 @@ void Plot::addLineGraphWithStyle(QColor color, QString name, Qt::PenStyle style,
     int idx = plot->graphCount() - 1;
     QPen pen(color);
     pen.setStyle(style);
-    pen.setWidth(width);
+    pen.setWidth(width > 0 ? width : PLOT_LINE_WIDTH);
     plot->graph(idx)->setPen(pen);
     if (!name.isEmpty())
         plot->graph(idx)->setName(name);
@@ -488,8 +494,38 @@ void Plot::setGraphLineStyle(int graphIndex, Qt::PenStyle style, QColor color, c
     if (graphIndex >= plot->graphCount()) return;
     QPen pen(color);
     pen.setStyle(style);
-    pen.setWidth(1);
+    pen.setWidth(PLOT_LINE_WIDTH);
     plot->graph(graphIndex)->setPen(pen);
     if (!name.isEmpty())
         plot->graph(graphIndex)->setName(name);
+}
+
+void Plot::setGraphLineWidth(int graphIndex, int width)
+{
+    if (graphIndex >= plot->graphCount()) return;
+    QPen pen = plot->graph(graphIndex)->pen();
+    pen.setWidth(width);
+    plot->graph(graphIndex)->setPen(pen);
+}
+
+void Plot::setAllGraphsInteractable(bool enable)
+{
+    plot->legend->setVisible(true);
+    for (int i = 0; i < plot->graphCount(); i++)
+        plot->graph(i)->setSelectable(QCP::stWhole);
+
+    if (enable) {
+        disconnect(plot, &QCustomPlot::legendClick, nullptr, nullptr);
+
+        connect(plot, &QCustomPlot::legendClick, this,
+                [=](QCPLegend*, QCPAbstractLegendItem* item, QMouseEvent*) {
+                    QCPPlottableLegendItem *pItem = qobject_cast<QCPPlottableLegendItem*>(item);
+                    if (pItem) {
+                        pItem->plottable()->setVisible(!pItem->plottable()->visible());
+                        pItem->setTextColor(pItem->plottable()->visible() ?
+                                                QColor(0,0,0) : QColor(180,180,180));
+                        plot->replot();
+                    }
+                });
+    }
 }

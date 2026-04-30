@@ -41,11 +41,24 @@ typedef enum {
     ALGO_POSTPROCESSING
 } algoInternalState_e;
 
+typedef enum {
+    ALGO_PERIOD_FROM_FILE   = 0,  // Read period from file N/P flag
+    ALGO_PERIOD_FIXED       = 1,  // Fixed period configured by user
+} algoPeriodMode_e;
+
+typedef struct algoConfig_t {
+    algoPeriodMode_e periodMode = ALGO_PERIOD_FROM_FILE;
+    int              fixedPeriod = 100;     // We can configure period if it's fixed
+    void            *userData   = nullptr;  // For custom logic
+} algoConfig_t;
+
 class Algo : public QObject {
     Q_OBJECT
 public:
-    explicit Algo(algoTimeTableDuration_e whitchAlgo, QObject *p = nullptr);
+    // default read from file with config
+    explicit Algo(algoTimeTableDuration_e whitchAlgo, algoConfig_t config, QObject *p = nullptr);
 
+    void algoInit(const algoConfig_t &config);
     void              setAlgoDynamics(const QVector<algoFlags_t>& flags);
     void              algoReset();
 
@@ -62,6 +75,7 @@ public:
     void              postProcessingUser();
 
     float             getQBath();
+    static int algoNameToIndex(algoTimeTableDuration_e algo);
 
 
     // User getters
@@ -80,6 +94,7 @@ signals:
     void preprocessingDone();
 
 private:
+    algoConfig_t algoConfig;
     algoTimeTableDuration_e   algo;
     QVector<algoFlags_t>      algoDynamics;
     algoStates_t              algoStates;
@@ -96,6 +111,7 @@ private:
     bool            ppDone                       = false;
     bool            nextCycleResetAlgoPeriod     = false;
 
+    int             fixedPeriodCounter           = 0;
     int             currentDynIndex              = 0;
     int             remainingSteps               = 0;
     int             lastRemainingSteps           = 0;

@@ -7,6 +7,8 @@
 #include <QPair>
 #include "Chart/qcustomplot.h"
 
+#define PLOT_LINE_WIDTH 2
+
 class Plot : public QWidget
 {
     Q_OBJECT
@@ -37,6 +39,8 @@ public:
     void setGraphLineStyle(int graphIndex, Qt::PenStyle style, QColor color, const QString &name);
     void setGraphData(int graphIndex, QVector<double> data, QVector<double> keys);
     int  graphCount() { return plot->graphCount(); }
+    void setGraphLineWidth(int graphIndex, int width);
+    void setAllGraphsInteractable(bool enable);
 
 signals:
 

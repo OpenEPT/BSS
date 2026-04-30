@@ -57,7 +57,7 @@ public:
         switch(algo) {
         case LP:              return LP_SYSTEM_TIME;
         case K0:              return LP_SYSTEM_TIME;
-        case K2:              return LP_SYSTEM_TIME;
+        case K2:              return K2_SYSTEM_TIME;
         case ADAPTIVE_LP_K0:  return LP_SYSTEM_TIME;
         case ADAPTIVE_LP_K2:  return LP_SYSTEM_TIME;
         default:              return LP_SYSTEM_TIME;

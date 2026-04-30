@@ -182,13 +182,11 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     , timerPeriodMs(10)
     , currentSample(0)
 {
-
     /* Constructors ************************************************************/
     batteryModel       = new BatteryModel(this);
     platformCurrent    = new PlatformCurrent(PLATFORM_CURRENT_ESP, this);
     timeTable          = new TimeTable(K2, this);
     simulatorContainer = new SimulatorContainer(batteryModel, platformCurrent, timeTable, this);
-
 
     /* Timers ******************************************************************/
     timer = new QTimer(this);
@@ -204,19 +202,25 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     QToolBar *tabToolBar = new QToolBar(this);
     tabToolBar->setMovable(false);
     tabToolBar->setFloatable(false);
-    tabToolBar->addWidget(tabBar);
-    addToolBar(Qt::TopToolBarArea, tabToolBar);
 
     playBtn    = new QPushButton("Play");
     stopBtn    = new QPushButton("Stop");
     pauseBtn   = new QPushButton("Pause");
     speedUpBtn = new QPushButton("1x");
+
     configBtn  = new QToolButton(this);
     configBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/conf.jpeg"));
     configBtn->setFixedSize(30, 30);
+
     logInfoBtn = new QToolButton(this);
     logInfoBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/info_button.png"));
     logInfoBtn->setFixedSize(30, 30);
+
+    simulationSettingsBtn  = new QToolButton(this);
+    simulationSettingsBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/simulation_config_icon.jpeg"));
+    simulationSettingsBtn->setFixedSize(30, 30);
+
+
 
     playBtn->setEnabled(false);
     stopBtn->setEnabled(false);
@@ -224,27 +228,26 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     speedUpBtn->setEnabled(false);
     configBtn->setEnabled(true);
     logInfoBtn->setEnabled(false);
+    simulationSettingsBtn->setEnabled(false);
 
     tabToolBar->addWidget(playBtn);
     tabToolBar->addWidget(stopBtn);
     tabToolBar->addWidget(pauseBtn);
     tabToolBar->addWidget(speedUpBtn);
     tabToolBar->addWidget(configBtn);
+    tabToolBar->addWidget(simulationSettingsBtn);
     tabToolBar->addWidget(logInfoBtn);
 
-    /* Tab bar *****************************************************************/
+    addToolBar(Qt::TopToolBarArea, tabToolBar);
+
+    /* TAB BAR ***************************************************************/
     tabBar = new QTabBar(this);
-    tabBar->setExpanding(false);
-    tabBar->setVisible(false);
+    tabBar->setExpanding(true);
+    tabBar->setDrawBase(false);
+
     connect(tabBar, &QTabBar::currentChanged, this, &SimulatorWnd::onTabChanged);
 
-    QWidget *centralWidget = new QWidget(this);
-    QVBoxLayout *centralLayout = new QVBoxLayout(centralWidget);
-    centralLayout->setContentsMargins(0, 0, 0, 0);
-    centralLayout->setSpacing(0);
-    centralLayout->addWidget(tabBar);
-    centralLayout->addStretch();
-    setCentralWidget(centralWidget);
+    setMenuWidget(tabBar);
 
     /* Plots *******************************************************************/
     currentBatteryPlot  = new Plot(400, 100, false, this);
@@ -281,7 +284,7 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     voltagePlot->setMinimumHeight(100);
     socPlot->setMinimumHeight(100);
 
-    /* Log console *****************************************************************/
+    /* Log console *************************************************************/
     logConsole = new QTextEdit(this);
     logConsole->setReadOnly(true);
     logConsole->setMaximumHeight(150);
@@ -290,48 +293,24 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     g_logConsole = logConsole;
     qInstallMessageHandler(logHandler);
 
-    /* Dock widgets ****************************************************************/
+    /* Dock widgets ************************************************************/
     currentBatteryDock = new QDockWidget("Battery Current", this);
     currentBatteryDock->setWidget(currentBatteryPlot);
-    currentBatteryDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    currentBatteryDock->setFeatures(QDockWidget::DockWidgetMovable |
-                                    QDockWidget::DockWidgetFloatable |
-                                    QDockWidget::DockWidgetClosable);
 
     currentSystemDock = new QDockWidget("System Current", this);
     currentSystemDock->setWidget(currentSystemPlot);
-    currentSystemDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    currentSystemDock->setFeatures(QDockWidget::DockWidgetMovable |
-                                   QDockWidget::DockWidgetFloatable |
-                                   QDockWidget::DockWidgetClosable);
 
     currentPlatformDock = new QDockWidget("Platform Current", this);
     currentPlatformDock->setWidget(currentPlatformPlot);
-    currentPlatformDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    currentPlatformDock->setFeatures(QDockWidget::DockWidgetMovable |
-                                     QDockWidget::DockWidgetFloatable |
-                                     QDockWidget::DockWidgetClosable);
 
     voltageDock = new QDockWidget("Battery Voltage", this);
     voltageDock->setWidget(voltagePlot);
-    voltageDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    voltageDock->setFeatures(QDockWidget::DockWidgetMovable |
-                             QDockWidget::DockWidgetFloatable |
-                             QDockWidget::DockWidgetClosable);
 
     socDock = new QDockWidget("SOC", this);
     socDock->setWidget(socPlot);
-    socDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    socDock->setFeatures(QDockWidget::DockWidgetMovable |
-                         QDockWidget::DockWidgetFloatable |
-                         QDockWidget::DockWidgetClosable);
 
     logDock = new QDockWidget("Log Console", this);
     logDock->setWidget(logConsole);
-    logDock->setAllowedAreas(Qt::BottomDockWidgetArea);
-    logDock->setFeatures(QDockWidget::DockWidgetMovable |
-                         QDockWidget::DockWidgetFloatable |
-                         QDockWidget::DockWidgetClosable);
 
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
     addDockWidget(Qt::LeftDockWidgetArea,   currentBatteryDock);
@@ -344,19 +323,14 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     splitDockWidget(currentSystemDock,   currentPlatformDock, Qt::Vertical);
     splitDockWidget(voltageDock,         socDock,             Qt::Vertical);
 
-    resizeDocks({currentBatteryDock, currentSystemDock, currentPlatformDock,
-                 voltageDock, socDock},
-                {200, 200, 200, 200, 200}, Qt::Vertical);
-    resizeDocks({currentBatteryDock, voltageDock}, {700, 700}, Qt::Horizontal);
-
     resize(1600, 1000);
 
     /* Status bar *****************************************************************/
     statusBar()->setStyleSheet("border-top: 1px solid palette(mid); padding: 2px;");
 
-    ledConfigLabel         = new QLabel(this);
-    ledPlaySimulationLabel = new QLabel(this);
-    statusConfigLabel      = new QLabel(this);
+    ledConfigLabel            = new QLabel(this);
+    ledPlaySimulationLabel    = new QLabel(this);
+    statusConfigLabel         = new QLabel(this);
     statusPlaySimulationLabel = new QLabel(this);
 
     progressBar = new QProgressBar(this);
@@ -368,6 +342,7 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
 
     ledConfigLabel->setFixedSize(16, 16);
     ledPlaySimulationLabel->setFixedSize(16, 16);
+
     setLed(ledConfigLabel, "grey");
     setLed(ledPlaySimulationLabel, "grey");
 
@@ -380,47 +355,63 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     statusBar()->addWidget(ledConfigLabel);
     statusBar()->addPermanentWidget(progressBar);
 
-    /* Button connections *****************************************************************/
-    connect(playBtn,    &QPushButton::clicked,  this, &SimulatorWnd::onPlayClicked);
-    connect(stopBtn,    &QPushButton::clicked,  this, &SimulatorWnd::onStopClicked);
-    connect(pauseBtn,   &QPushButton::clicked,  this, &SimulatorWnd::onPauseClicked);
-    connect(speedUpBtn, &QPushButton::clicked,  this, &SimulatorWnd::onSpeedUpClicked);
-    connect(configBtn,  &QToolButton::clicked,  this, &SimulatorWnd::onConfigClicked);
-    connect(logInfoBtn, &QToolButton::clicked,  this, &SimulatorWnd::onLogInfoClicked);
 
-    /* Online dataSample connection *******************************************************/
+    /* Button connections *********************************************************/
+    connect(playBtn,    &QPushButton::clicked, this, &SimulatorWnd::onPlayClicked);
+    connect(stopBtn,    &QPushButton::clicked, this, &SimulatorWnd::onStopClicked);
+    connect(pauseBtn,   &QPushButton::clicked, this, &SimulatorWnd::onPauseClicked);
+    connect(speedUpBtn, &QPushButton::clicked, this, &SimulatorWnd::onSpeedUpClicked);
+    connect(configBtn,  &QToolButton::clicked, this, &SimulatorWnd::onConfigClicked);
+    connect(logInfoBtn, &QToolButton::clicked, this, &SimulatorWnd::onLogInfoClicked);
+    connect(simulationSettingsBtn, &QToolButton::clicked, this, &SimulatorWnd::onSimuSettingsClicked);
+
+
+    /* Online dataSample connection ***********************************************/
     connect(simulatorContainer, &SimulatorContainer::dataSample, this,
             [=](float timeS, double vBat, float iSys, float iPlatform,
                 float iBat, float socPct, float socIsysPct)
             {
                 if (socPct <= endSoC * 100.0f) {
                     timer->stop();
+
                     playBtn->setEnabled(false);
                     stopBtn->setEnabled(true);
                     pauseBtn->setEnabled(false);
                     speedUpBtn->setEnabled(false);
                     logInfoBtn->setEnabled(true);
+
                     qDebug() << "Simulation finished, reached end SoC";
                     return;
                 }
+
                 currentBatteryPlot->appendData ({(double)iBat},      {(double)timeS});
                 currentSystemPlot->appendData  ({(double)iSys},      {(double)timeS});
                 currentPlatformPlot->appendData({(double)iPlatform}, {(double)timeS});
                 voltagePlot->appendData        ({vBat},              {(double)timeS});
                 socPlot->appendData            ({(double)socPct},    {(double)timeS});
                 socPlot->appendData2           ({(double)socIsysPct},{(double)timeS});
+
                 currentSample++;
+
                 int pct = (int)((float)currentSample /
                                  simulatorContainer->getNumberOfSamples() * 100.0f);
+
                 progressBar->setValue(pct);
+
             }, Qt::QueuedConnection);
 
-    connect(simulatorContainer, &SimulatorContainer::loadSuccess, this,
-            [=]{ playBtn->setEnabled(true); });
-    connect(simulatorContainer, &SimulatorContainer::loadError, this,
-            [=](const QString &msg){ qDebug() << "Load error:" << msg; });
-}
 
+    /* Load signals ***************************************************************/
+    connect(simulatorContainer, &SimulatorContainer::loadSuccess, this,
+            [=]{
+                playBtn->setEnabled(true);
+            });
+
+    connect(simulatorContainer, &SimulatorContainer::loadError, this,
+            [=](const QString &msg){
+                qDebug() << "Load error:" << msg;
+            });
+}
 /*******************************************************************************
  * clearAlgoTabs
  ******************************************************************************/
@@ -432,7 +423,14 @@ void SimulatorWnd::clearAlgoTabs()
     for (auto &tab : algoTabs) {
         delete tab.container;
         delete tab.batteryModel;
+        delete tab.timeTable;
     }
+
+    tabBar->setMaximumHeight(QWIDGETSIZE_MAX);
+    tabBar->setMinimumHeight(0);
+    tabBar->setFixedHeight(0);
+    tabBar->setVisible(false);
+
     algoTabs.clear();
     tabBar->setVisible(false);
 }
@@ -492,47 +490,61 @@ void SimulatorWnd::replotCompareTab()
     voltagePlot->clearAllGraphs();
     currentBatteryPlot->clearAllGraphs();
 
-    // Omogući legendu za SoC plot
     socPlot->enableLegend(true);
     voltagePlot->enableLegend(true);
     currentBatteryPlot->enableLegend(true);
 
-    // graph(0) = SoCIsys - sivi, tačkasta
+    // graph(0) = SoCIsys - sivi, tačkasta, deblja
     socPlot->setGraphLineStyle(0, Qt::DotLine, QColor(0, 0, 0), "SoC Isys");
+    socPlot->setGraphLineWidth(0, 2);
     socPlot->setGraphData(0, algoTabs[0].simulatorSample.soc.system,
                           algoTabs[0].simulatorSample.time);
 
     int graphIdx = 1;
+    int voltageIdx = 0;
     for (int i = 0; i < algoTabs.size(); i++) {
+
+        // Preskoci ako nije selektovan
+        bool show = (i < visibleAlgosInCompare.size()) ?
+                        visibleAlgosInCompare[i] : true;
+        if (!show) continue;
+
         const algoTab_t &tab = algoTabs[i];
-        QColor colorAlgo     = colors[i % colors.size()];
-        QColor colorSoCBat   = colorAlgo.lighter(140);
+        QColor colorAlgo   = colors[i % colors.size()];
+        QColor colorSoCBat = colorAlgo.lighter(140);
 
-        // SoCBat - isprekidana
-        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine);
-        socPlot->setGraphData(graphIdx, tab.simulatorSample.soc.battery,
+        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine, 2);
+        socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.battery,
                               tab.simulatorSample.time);
-        graphIdx++;
 
-        // AlgoSoC - puna
         socPlot->addLineGraph(colorAlgo, tab.algoName + " AlgoSoC");
-        socPlot->setGraphData(graphIdx, tab.simulatorSample.soc.algoSoc,
+        socPlot->setGraphLineWidth(graphIdx, 2);
+        socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.algoSoc,
                               tab.simulatorSample.time);
-        graphIdx++;
 
-        // Voltage i Current
-        if (i == 0) {
+        if (voltageIdx == 0) {
             voltagePlot->setGraphName(0, tab.algoName);
+            voltagePlot->setGraphLineWidth(0, 2);
             voltagePlot->setData(tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
             currentBatteryPlot->setGraphName(0, tab.algoName);
+            currentBatteryPlot->setGraphLineWidth(0, 2);
             currentBatteryPlot->setData(tab.simulatorSample.current.battery, tab.simulatorSample.time);
         } else {
             voltagePlot->addLineGraph(colorAlgo, tab.algoName);
-            voltagePlot->setGraphData(i, tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
+            voltagePlot->setGraphLineWidth(voltageIdx, 2);
+            voltagePlot->setGraphData(voltageIdx, tab.simulatorSample.voltage.battery,
+                                      tab.simulatorSample.time);
             currentBatteryPlot->addLineGraph(colorAlgo, tab.algoName);
-            currentBatteryPlot->setGraphData(i, tab.simulatorSample.current.battery, tab.simulatorSample.time);
+            currentBatteryPlot->setGraphLineWidth(voltageIdx, 2);
+            currentBatteryPlot->setGraphData(voltageIdx, tab.simulatorSample.current.battery,
+                                             tab.simulatorSample.time);
         }
+        voltageIdx++;
     }
+
+    socPlot->setAllGraphsInteractable(true);
+    voltagePlot->setAllGraphsInteractable(true);
+    currentBatteryPlot->setAllGraphsInteractable(true);
 
     socPlot->replotAll();
     voltagePlot->replotAll();
@@ -823,9 +835,13 @@ void SimulatorWnd::onConfigClicked()
             tab.algoName = algoTabName(algo);
 
             BatteryModel *tabBatteryModel = new BatteryModel(this);
+            TimeTable    *tabTimeTable    = new TimeTable(algo, this);
+
+            tab.batteryModel = tabBatteryModel;
+            tab.timeTable    = tabTimeTable;
 
             tab.container = new SimulatorContainer(
-                tabBatteryModel, platformCurrent, timeTable, this);
+                tabBatteryModel, platformCurrent, tabTimeTable, this);
 
             tab.container->setCurrentPath(currPath);
             tab.container->setOcvPolyPath(polynomsPath);
@@ -854,9 +870,13 @@ void SimulatorWnd::onConfigClicked()
             tab.container->reset(initialSoC);
         }
 
-        tabBar->setVisible(true);
-        tabBar->setCurrentIndex(0);
+        // Set tabs to be invisible
+        tabBar->setMaximumHeight(QWIDGETSIZE_MAX);
+        tabBar->setMinimumHeight(0);
+        tabBar->setFixedHeight(0);
+        tabBar->setVisible(false);
 
+        // Speed button set false
         speedUpBtn->setEnabled(false);
         speedUpBtn->setText("Offline");
     }
@@ -865,6 +885,80 @@ void SimulatorWnd::onConfigClicked()
     setLed(ledConfigLabel, "green");
     statusConfigLabel->setText("Configured");
 }
+
+
+/*******************************************************************************
+ * onSimulationSettingsClicked
+ ******************************************************************************/
+void SimulatorWnd::onSimuSettingsClicked()
+{
+    if (algoTabs.isEmpty()) {
+        QMessageBox::information(this, "No Simulation", "Run a simulation first.");
+        return;
+    }
+
+    QDialog *dialog = new QDialog(this);
+    dialog->setWindowTitle("Simulation Display Settings");
+    dialog->resize(400, 350);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(dialog);
+
+    // === GROUP ===
+    QGroupBox *visibilityGroup = new QGroupBox("Show Algorithms");
+    QVBoxLayout *visLayout = new QVBoxLayout();
+
+    QList<QCheckBox*> compareCheckboxes;
+
+    // === CHECKBOX LIST ===
+    for (int i = 0; i < algoTabs.size(); i++) {
+        QCheckBox *cb = new QCheckBox(algoTabs[i].algoName);
+
+        // restore previous state
+        bool checked = (i < visibleAlgosInCompare.size()) ?
+                           visibleAlgosInCompare[i] : true;
+
+        cb->setChecked(checked);
+
+        visLayout->addWidget(cb);
+        compareCheckboxes.append(cb);
+    }
+
+    visibilityGroup->setLayout(visLayout);
+    mainLayout->addWidget(visibilityGroup);
+    mainLayout->addStretch();
+
+    // === BUTTONS ===
+    QDialogButtonBox *buttons =
+        new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+
+    QHBoxLayout *btnLayout = new QHBoxLayout();
+    btnLayout->addStretch();
+    btnLayout->addWidget(buttons);
+    mainLayout->addLayout(btnLayout);
+
+    // === EXEC ===
+    if (dialog->exec() != QDialog::Accepted)
+        return;
+
+    // === SAVE STATE ===
+    visibleAlgosInCompare.clear();
+    for (int i = 0; i < compareCheckboxes.size(); i++)
+        visibleAlgosInCompare.append(compareCheckboxes[i]->isChecked());
+
+    // === ONLY ONE TAB ===
+    int outputIdx = algoTabs.size();
+
+    tabBar->setTabVisible(outputIdx, true);
+    tabBar->setTabEnabled(outputIdx, true);
+    tabBar->setCurrentIndex(outputIdx);
+
+    // === REPLOT ===
+    replotCompareTab();
+}
+
 
 /*******************************************************************************
  * onLogInfoClicked
@@ -985,6 +1079,13 @@ void SimulatorWnd::onStopClicked()
     speedUpBtn->setEnabled(false);
     configBtn->setEnabled(true);
     logInfoBtn->setEnabled(false);
+    simulationSettingsBtn->setEnabled(false);
+
+    // Hide tab Bar
+    tabBar->setMaximumHeight(QWIDGETSIZE_MAX);
+    tabBar->setMinimumHeight(0);
+    tabBar->setFixedHeight(0);
+    tabBar->setVisible(false);
 
     setLed(ledPlaySimulationLabel, "red");
     statusPlaySimulationLabel->setText("Stopped");
@@ -1119,6 +1220,9 @@ void SimulatorWnd::startOfflineSimulation()
 
                     int done = finishedCount->fetchAndAddOrdered(1) + 1;
                     if (done == tabCount) {
+                        visibleAlgosInCompare.clear();
+                        for (int i = 0; i < algoTabs.size(); i++)
+                            visibleAlgosInCompare.append(true);
                         progressBar->setValue(100);
                         setLed(ledPlaySimulationLabel, "green");
                         statusPlaySimulationLabel->setText("Offline Done");
@@ -1126,6 +1230,7 @@ void SimulatorWnd::startOfflineSimulation()
                         stopBtn->setEnabled(true);
                         configBtn->setEnabled(true);
                         logInfoBtn->setEnabled(true);
+                        simulationSettingsBtn->setEnabled(true);
                         pauseBtn->setEnabled(false);
                         speedUpBtn->setEnabled(false);
                         qDebug() << "All simulations finished";

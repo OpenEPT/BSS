@@ -1,10 +1,18 @@
 #include "Algo.h"
 
 
-Algo::Algo(algoTimeTableDuration_e whitchAlgo, QObject *p)
+Algo::Algo(algoTimeTableDuration_e whitchAlgo,
+           algoConfig_t config,
+           QObject *p)
     : QObject(p)
 {
     this->algo = whitchAlgo;
+    algoInit(config);
+}
+
+void Algo::algoInit(const algoConfig_t &config)
+{
+    algoConfig = config;
 }
 
 void Algo::onPlatformCurrentReady(double currentA){
@@ -57,30 +65,42 @@ void Algo::postProcessing(){
 algoCurrentInfo_t Algo::preProcessingSystem()
 {
     // Take every step current and previous flag
-    if (currentDynIndex < algoDynamics.size()) {
+    if (algoConfig.periodMode == ALGO_PERIOD_FIXED) {
+        previousFlag = currentFlag;  // ← sačuvaj pre promene
 
-        if (remainingSteps > 0) {
-            currentFlag = algoDynamics[currentDynIndex - 1].flag;
-            remainingSteps--;
+        fixedPeriodCounter++;
+
+        if (fixedPeriodCounter >= algoConfig.fixedPeriod) {
+            currentFlag        = P;
+            fixedPeriodCounter = 0;
         } else {
-
-            currentFlag = algoDynamics[currentDynIndex].flag;
-
-            if (currentDynIndex == 0) {
-                previousFlag = N;
+            currentFlag = N;
+        }
+    } else {
+        // Čita iz fajla - postojeći kod
+        if (currentDynIndex < algoDynamics.size()) {
+            if (remainingSteps > 0) {
+                currentFlag = algoDynamics[currentDynIndex - 1].flag;
+                remainingSteps--;
             } else {
-                previousFlag = algoDynamics[currentDynIndex - 1].flag;
+                currentFlag = algoDynamics[currentDynIndex].flag;
+
+                if (currentDynIndex == 0) {
+                    previousFlag = N;
+                } else {
+                    previousFlag = algoDynamics[currentDynIndex - 1].flag;
+                }
+
+                remainingSteps = algoDynamics[currentDynIndex].exe - 1;
+
+                if (currentDynIndex >= 2) {
+                    lastRemainingSteps = algoDynamics[currentDynIndex - 2].exe;
+                } else {
+                    lastRemainingSteps = 0;
+                }
+
+                lastRemainingSteps = currentDynIndex++;
             }
-
-            remainingSteps = algoDynamics[currentDynIndex].exe - 1;
-
-            if (currentDynIndex >= 2) {
-                lastRemainingSteps = algoDynamics[currentDynIndex - 2].exe;
-            } else {
-                lastRemainingSteps = 0;
-            }
-
-            lastRemainingSteps = currentDynIndex++;
         }
     }
 
@@ -123,6 +143,9 @@ algoCurrentInfo_t Algo::preProcessingSystem()
         emit requestPlatformCurrent();
     }
 
+    if(currentFlag == N){
+        algoPeriod++;
+    }
     lastFlag = currentFlag;
     algoCurrentInfo.flag = ppDone ? P : currentFlag;
 
@@ -141,11 +164,17 @@ void Algo::processingSystem(double iBat)
     if (calculateExeTimeInProcessing == true){
         // Get exe
         int exeCycles = 0;
-        if (currentDynIndex > 0 && currentDynIndex <= algoDynamics.size()) {
-            exeCycles = algoDynamics[currentDynIndex - 1].exe;
+
+        if(algoConfig.periodMode == ALGO_PERIOD_FROM_FILE){
+            if (currentDynIndex > 0 && currentDynIndex <= algoDynamics.size()) {
+                exeCycles = algoDynamics[currentDynIndex - 1].exe;
+                algo = intToAlgoDuration(exeCycles);
+            }
         }
 
-        algo = intToAlgoDuration(exeCycles);
+        else{
+            // Algo is already good value due to init algo
+        }
 
         // Trigger TimeTable → onAlgoDuration → ppCycles
         emit getWitchAlgo(algo);
@@ -161,7 +190,9 @@ void Algo::postProcessingSystem()
 
     if(nextCycleResetAlgoPeriod){
         nextCycleResetAlgoPeriod  = false;
-        algoPeriod = 1;
+        if (currentFlag == P){
+            algoPeriod = 1;
+        }
     }
 
     if (ppCounter >= ppCycles) {

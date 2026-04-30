@@ -14,11 +14,14 @@ SimulatorContainer::SimulatorContainer(
     , electricCharges{0.0, 0.0, 0.0}
     , globalSampleIndex(0)
 {
+    algoConfig_t config;
+    config.periodMode = ALGO_PERIOD_FROM_FILE;
+
     inputProcessing  = new SimulatorInput(this);
     voltageEstimator = new VoltageEstimator(this);
     socReference     = new SocReference(this);
     batteryCurrGen   = new BatteryCurrentGenerator(this);
-    algo             = new Algo(K2, this);
+    algo             = new Algo(K2, config, this);
     noiseGenerator   = new NoiseGenerator(inputProcessing);
 
     // Output file is opened in loadFiles() after outputFilePath is set

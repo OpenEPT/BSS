@@ -58,6 +58,7 @@ typedef struct algoTab_t {
 
     // Unique per tab:
     SimulatorContainer *container = nullptr;
+    TimeTable          *timeTable    = nullptr;
     BatteryModel *batteryModel = nullptr;
 
     // Collected data vectors
@@ -77,12 +78,16 @@ public:
     explicit SimulatorWnd(QWidget *parent = nullptr);
 
 private slots:
+    // On buttons clicked
     void onPlayClicked();
     void onStopClicked();
     void onPauseClicked();
     void onSpeedUpClicked();
     void onConfigClicked();
     void onLogInfoClicked();
+    void onSimuSettingsClicked();
+
+    // Other functionality
     void onTimerTick();
     void onLedTimerTimeout();
     void onTabChanged(int index);
@@ -112,6 +117,8 @@ private:
     void clearAlgoTabs();
     void replotActiveTab();
 
+    QList<bool> visibleAlgosInCompare;
+
     // ── Toolbar ───────────────────────────────────────────────────────────────
     QPushButton *playBtn;
     QPushButton *stopBtn;
@@ -120,6 +127,7 @@ private:
     QPushButton *speedUpBtn;
     QToolButton *logInfoBtn;
     QToolButton *configBtn;
+    QToolButton *simulationSettingsBtn;
 
     // ── Tab bar (algo switcher) ────────────────────────────────────────────────
     QTabBar *tabBar;
