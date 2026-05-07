@@ -84,7 +84,6 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     currentPlatformPlot = new Plot(400, 100, false, this);
     voltagePlot         = new Plot(400, 100, false, this);
     socPlot             = new Plot(400, 100, false, this);
-    socErrorDiffPlot    = new Plot(400, 100, false, this);
 
     // Current Battery plot
     currentBatteryPlot->setTitle("Battery Current");
@@ -111,18 +110,12 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     socPlot->setYLabel("[%]");
     socPlot->setXLabel("[s]");
 
-    // SoC algo diff plot
-    socErrorDiffPlot->setTitle("SoC Error Difference");
-    socErrorDiffPlot->setYLabel("[%]");
-    socErrorDiffPlot->setXLabel("[s]");
-
     // Set height of plots
     currentBatteryPlot->setMinimumHeight(150);
     currentSystemPlot->setMinimumHeight(150);
     currentPlatformPlot->setMinimumHeight(150);
     voltagePlot->setMinimumHeight(150);
     socPlot->setMinimumHeight(150);
-    socErrorDiffPlot->setMinimumHeight(150);
 
     // ── Log console ─────────────────────────────────────────────────────────────────
     logConsole = new QTextEdit(this);
@@ -154,10 +147,6 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     socDock = new QDockWidget("SoC", this);
     socDock->setWidget(socPlot);
 
-    // SoC algo diff dock
-    socAlgoDiffDock = new QDockWidget("SoC Error Difference", this);
-    socAlgoDiffDock->setWidget(socErrorDiffPlot);
-
     // Logging console dock
     logDock = new QDockWidget("Log Console", this);
     logDock->setWidget(logConsole);
@@ -169,7 +158,6 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     addDockWidget(Qt::LeftDockWidgetArea,   currentPlatformDock);
     addDockWidget(Qt::RightDockWidgetArea,  voltageDock);
     addDockWidget(Qt::RightDockWidgetArea,  socDock);
-    addDockWidget(Qt::RightDockWidgetArea,  socAlgoDiffDock);
 
     // Split docks area
     splitDockWidget(currentBatteryDock,  currentSystemDock,   Qt::Vertical);
@@ -272,6 +260,10 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     // Timer connections
     connect(timer, &QTimer::timeout, this, &SimulatorWnd::onTimerTick);
     connect(ledTimer, &QTimer::timeout, this, &SimulatorWnd::onLedTimerTimeout);
+
+    // If output simulation is checked in simulation settings window
+    connect(this, &SimulatorWnd::sigOpenOuputWindow,
+            this, &SimulatorWnd::onOutputSimulationChecked);
 }
 
 void SimulatorWnd::replotActiveTab()
@@ -292,12 +284,10 @@ void SimulatorWnd::replotActiveTab()
     currentBatteryPlot->clearAllGraphs();
     currentPlatformPlot->clearAllGraphs();
     currentSystemPlot->clearAllGraphs();
-    socErrorDiffPlot->clearAllGraphs();
 
     // Enable legends for all graphs that need it
     currentPlatformPlot->enableLegend(true);
     socPlot->enableLegend(true);
-    socErrorDiffPlot->enableLegend(true);
     voltagePlot->enableLegend(true);
     currentBatteryPlot->enableLegend(true);
 
@@ -314,9 +304,6 @@ void SimulatorWnd::replotActiveTab()
     int graphIdx = 1;
     int plotIdx = 0;
 
-    // This info is for plot on soc error difference
-    QVector<double> socError = {0};
-
     // Plot all other graphs
     for (int i = 0; i < algoTabs.size(); i++) {
 
@@ -331,13 +318,6 @@ void SimulatorWnd::replotActiveTab()
         const algoTab_t &tab = algoTabs[i];
         QColor colorAlgo   = colors[i % colors.size()];
         QColor colorSoCBat = colorAlgo.lighter(140);
-
-        // Reload the value
-        socError = {0};
-
-        for(int j = 0; j < tab.simulatorSample.soc.algoSoc.size(); j++){
-            socError.append(tab.simulatorSample.soc.algoSoc[j] - tab.simulatorSample.soc.battery[j]);
-        }
 
         // ── SoC ───────────────────────────────────────────────────────────────────────────────────
 
@@ -367,11 +347,6 @@ void SimulatorWnd::replotActiveTab()
             currentPlatformPlot->setGraphLineWidth(0, 2);
             currentPlatformPlot->setData(tab.simulatorSample.current.platform, tab.simulatorSample.time);
 
-            // Soc Error Difference
-            socErrorDiffPlot->setGraphName(0, tab.algoName);
-            socErrorDiffPlot->setGraphLineWidth(0, 2);
-            socErrorDiffPlot->setData(socError, tab.simulatorSample.time);
-
         } else {
             // Voltage plot
             voltagePlot->addLineGraph(colorAlgo, tab.algoName);
@@ -387,18 +362,12 @@ void SimulatorWnd::replotActiveTab()
             currentPlatformPlot->addLineGraph(colorAlgo, tab.algoName);
             currentPlatformPlot->setGraphLineWidth(plotIdx, 2);
             currentPlatformPlot->setGraphData(plotIdx, tab.simulatorSample.current.platform, tab.simulatorSample.time);
-
-            // Soc Error Difference
-            socErrorDiffPlot->addLineGraph(colorAlgo, tab.algoName);
-            socErrorDiffPlot->setGraphLineWidth(plotIdx, 2);
-            socErrorDiffPlot->setGraphData(plotIdx, socError, tab.simulatorSample.time);
         }
         plotIdx++;
     }
 
     // Replot all graphs
     socPlot->replotAll();
-    socErrorDiffPlot->replotAll();
     voltagePlot->replotAll();
     currentBatteryPlot->replotAll();
     currentPlatformPlot->replotAll();
@@ -932,14 +901,18 @@ void SimulatorWnd::onSimuSettingsClicked()
     // Main layout
     QVBoxLayout *mainLayout = new QVBoxLayout(dialog);
 
-    // Visible group
-    QGroupBox *visibilityGroup = new QGroupBox("Show Algorithms");
-    QVBoxLayout *visLayout = new QVBoxLayout();
+    // Algorithm  group
+    QGroupBox *algoGroup = new QGroupBox("Show Algorithms Plots");
+    QVBoxLayout *algoLayout = new QVBoxLayout();
+
+    // Simulation output group
+    QGroupBox *outputGroup = new QGroupBox("Show Outputs Plots");
+    QVBoxLayout *outputLayout = new QVBoxLayout();
 
     // List of checkboxes
     QList<QCheckBox*> compareCheckboxes;
 
-    // CheckBox list
+    // CheckBox list for algo
     for (int i = 0; i < algoTabs.size(); i++) {
         // New checkbox
         QCheckBox *cb = new QCheckBox(algoTabs[i].algoName + " " + "[" + algoTabs[i].platformName + "]");
@@ -951,17 +924,39 @@ void SimulatorWnd::onSimuSettingsClicked()
         cb->setChecked(checked);
 
         // Add to VBox
-        visLayout->addWidget(cb);
+        algoLayout->addWidget(cb);
 
         // Save current state of checkbox for next time when they open window
         compareCheckboxes.append(cb);
     }
 
+    // List of checkboxes
+    QList<QCheckBox*> outputCheckboxes;
+
+    for(int i = 0; i < 1; i++){
+        QCheckBox *checkBoxOutput = new QCheckBox("Output SoC Difference");
+
+        // Tihis is restoring previous state
+        bool checkedOutput = (i < visibleOutputInSimulationSettings.size()) ? visibleOutputInSimulationSettings[i] : true;
+
+        checkBoxOutput->setChecked(checkedOutput);
+
+        // Add to output layout
+        outputLayout->addWidget(checkBoxOutput);
+
+        // Save current state of checkbox for next time when they open this window
+        outputCheckboxes.append(checkBoxOutput);
+    }
+
     // Add to visibility group
-    visibilityGroup->setLayout(visLayout);
+    algoGroup->setLayout(algoLayout);
+
+    // Add to output group
+    outputGroup->setLayout(outputLayout);
 
     // Add visibility group to the main layout
-    mainLayout->addWidget(visibilityGroup);
+    mainLayout->addWidget(algoGroup);
+    mainLayout->addWidget(outputGroup);
 
     // Strech it
     mainLayout->addStretch();
@@ -989,10 +984,99 @@ void SimulatorWnd::onSimuSettingsClicked()
     for (int i = 0; i < compareCheckboxes.size(); i++)
         visibleAlgosInCompare.append(compareCheckboxes[i]->isChecked());
 
+    visibleOutputInSimulationSettings.clear();
+    for (int i = 0; i < outputCheckboxes.size(); i++)
+        visibleOutputInSimulationSettings.append(outputCheckboxes[i]->isChecked());
+
     // Replot active tab with configured algo that we checked
     replotActiveTab();
+
+    if (!outputCheckboxes.isEmpty() && outputCheckboxes[0]->isChecked()) {
+        emit sigOpenOuputWindow();
+    }
 }
 
+
+void SimulatorWnd::onOutputSimulationChecked(){
+    QDialog *dialog = new QDialog(this);
+    dialog->resize(800, 800);
+
+    QVBoxLayout *layout = new QVBoxLayout(dialog);
+
+    static const QList<QColor> colors = {
+        QColor(40,  110, 255), QColor(255, 100,   0), QColor(0,   180,   0),
+        QColor(180,   0, 180), QColor(255,   0,   0), QColor(0,   200, 200),
+        QColor(255, 200,   0), QColor(0,   100, 100), QColor(255,   0, 150),
+        QColor(100, 100,   0), QColor(0,    50, 200), QColor(200, 100,  50),
+        QColor(100, 200,   0), QColor(200,   0,  50), QColor(0,   150, 255),
+        QColor(150,   0, 255), QColor(255, 150,   0), QColor(0,   200, 100),
+        QColor(200, 200,   0), QColor(100,   0, 200),
+    };
+
+    // Create plots for this window
+    socErrorDiffPlot    = new Plot(400, 100, false, dialog);
+
+    // SoC algo diff plot
+    socErrorDiffPlot->setTitle("SoC Error Difference");
+    socErrorDiffPlot->setYLabel("[%]");
+    socErrorDiffPlot->setXLabel("[s]");
+
+    layout->addWidget(socErrorDiffPlot);
+
+    socErrorDiffPlot->clearAllGraphs();
+
+
+    socErrorDiffPlot->enableLegend(true);
+
+    // This info is for plot on soc error difference
+    QVector<double> socError = {0};
+
+    int plotIdx = 0;
+
+    // Plot all other graphs
+    for (int i = 0; i < algoTabs.size(); i++) {
+
+        // Check if algo is selected in simulation settings
+        bool show = (i < visibleAlgosInCompare.size()) ? visibleAlgosInCompare[i] : true;
+
+        // If it's not selected skip algo, doesn't need to be plotted
+        if (!show) continue;
+
+
+        // take algo tab
+        const algoTab_t &tab = algoTabs[i];
+        QColor colorAlgo   = colors[i % colors.size()];
+        QColor colorSoCBat = colorAlgo.lighter(140);
+
+        // Reload the value
+        socError = {0};
+
+        for(int j = 0; j < tab.simulatorSample.soc.algoSoc.size(); j++){
+            socError.append(tab.simulatorSample.soc.algoSoc[j] - tab.simulatorSample.soc.battery[j]);
+        }
+
+
+        // ── Voltage, Battery & Platform Current ───────────────────────────────────────────────────
+        if (plotIdx == 0) {
+            // Soc Error Difference
+            socErrorDiffPlot->setGraphName(0, tab.algoName);
+            socErrorDiffPlot->setGraphLineWidth(0, 2);
+            socErrorDiffPlot->setData(socError, tab.simulatorSample.time);
+
+        } else {
+            // Soc Error Difference
+            socErrorDiffPlot->addLineGraph(colorAlgo, tab.algoName);
+            socErrorDiffPlot->setGraphLineWidth(plotIdx, 2);
+            socErrorDiffPlot->setGraphData(plotIdx, socError, tab.simulatorSample.time);
+        }
+        plotIdx++;
+    }
+
+    // Replot all graphs
+    socErrorDiffPlot->replotAll();
+
+    dialog->show();
+}
 
 /*******************************************************************************
  * onLogInfoClicked
@@ -1179,7 +1263,6 @@ void SimulatorWnd::onSpeedUpClicked()
 {
     // Offline skip
     if (isOfflineMode) return;
-
 
     // Online analysis change period of timer, speed it up
     if      (timerPeriodMs == 10) { speedUpBtn->setText("2x"); timerPeriodMs = 5;  }

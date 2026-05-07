@@ -102,6 +102,9 @@ private slots:
     void onLogInfoClicked();
     void onSimuSettingsClicked();
 
+    // Window for output results from config simulation settings
+    void onOutputSimulationChecked();
+
     // Other functionality
     void onTimerTick();
     void onLedTimerTimeout();
@@ -129,6 +132,7 @@ signals:
     void sigStop();
     void sigPause();
     void sigSpeedUp();
+    void sigOpenOuputWindow();
 
 private:
     void replotActiveTab();
@@ -136,6 +140,8 @@ private:
 
     // This is visibility list for all algo in simulation settings that choose if algo needs to be plot
     QList<bool> visibleAlgosInCompare;
+
+    QList<bool> visibleOutputInSimulationSettings;
 
     // Saving tagle from config settings to know which algo's are previous choosed
     QList<algoTableRow_t> savedAlgoTableRows;
