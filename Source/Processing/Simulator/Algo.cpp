@@ -25,11 +25,14 @@ void Algo::setAlgoDynamics(const QVector<algoFlags_t>& flags) {
     remainingSteps = 0;
 }
 
-void Algo::algoReset(){
-    currentDynIndex = 0;
-    remainingSteps = 0;
-    ppSignalReady = false;
-    veReady       = false;
+void Algo::algoReset(float socReference)
+{
+    currentDynIndex    = 0;
+    remainingSteps     = 0;
+    ppSignalReady      = false;
+    veReady            = false;
+    fixedPeriodCounter = 0;
+    algoSocOutput      = socReference;
 }
 
 /*********** Algo processing functions *******************/

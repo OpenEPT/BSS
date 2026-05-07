@@ -53,19 +53,31 @@ typedef struct SimulatorSample_t {
  * AlgoTab - Algorithm Subsystem Block
  ******************************************************************************/
 typedef struct algoTab_t {
-    algoTimeTableDuration_e algo;
-    QString                 algoName;
-
-    // Unique per tab:
-    SimulatorContainer *container = nullptr;
-    TimeTable          *timeTable    = nullptr;
-    BatteryModel *batteryModel = nullptr;
-
-    // Collected data vectors
-    SimulatorSample_t simulatorSample;
+    algoTimeTableDuration_e  algo;
+    QString                  algoName;
+    QString                  platformName;
+    platform_current_mah_e   platformEnum    = PLATFORM_CURRENT_ESP;
+    BatteryModel            *batteryModel    = nullptr;
+    TimeTable               *timeTable       = nullptr;
+    PlatformCurrent         *platformCurrent = nullptr;
+    SimulatorContainer      *container       = nullptr;
+    SimulatorSample_t        simulatorSample;
     double avgBatteryCurr = 0.0;
     double avgSystemCurr  = 0.0;
 } algoTab_t;
+
+struct algoTableRow_t {
+    QString algoText;
+    QString platformText;
+    QString modeText;
+    QString periodText;
+    QString batteryText;
+    QVariant algoData;
+    QVariant platformData;
+    QVariant modeData;
+    int      periodValue;
+    QVariant batteryData;
+};
 
 /*******************************************************************************
  * SimulatorWnd
@@ -78,11 +90,14 @@ public:
     explicit SimulatorWnd(QWidget *parent = nullptr);
 
 private slots:
-    // On buttons clicked
+
+    // On buttons clicked that directly manipulate simulation
     void onPlayClicked();
     void onStopClicked();
     void onPauseClicked();
     void onSpeedUpClicked();
+
+    // This are 3 buttons that opens a config windows
     void onConfigClicked();
     void onLogInfoClicked();
     void onSimuSettingsClicked();
@@ -90,12 +105,13 @@ private slots:
     // Other functionality
     void onTimerTick();
     void onLedTimerTimeout();
-    void onTabChanged(int index);
     void redistributeDocks();
     void startOfflineSimulation();
-    void replotCompareTab();
+
+
     double getSimulationEndSoC()  { return endSoC;     }
     double getSimulationInitSoC() { return initialSoC; }
+
     void setLed(QLabel *led,
                 const QString &color = "None",
                 simulationState_e simulationState = SIMULATION_UNINIT);
@@ -105,7 +121,8 @@ private slots:
                                     lastSimulationStepsValues finalResults,
                                     float timeElapsed,
                                     int totalSamples,
-                                    const QString &algoName);
+                                    const QString &algoName,
+                                    const QString &platformName);
 
 signals:
     void sigPlay();
@@ -114,10 +131,14 @@ signals:
     void sigSpeedUp();
 
 private:
-    void clearAlgoTabs();
     void replotActiveTab();
+    void clearAlgoTabs();
 
+    // This is visibility list for all algo in simulation settings that choose if algo needs to be plot
     QList<bool> visibleAlgosInCompare;
+
+    // Saving tagle from config settings to know which algo's are previous choosed
+    QList<algoTableRow_t> savedAlgoTableRows;
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
     QPushButton *playBtn;
@@ -129,15 +150,13 @@ private:
     QToolButton *configBtn;
     QToolButton *simulationSettingsBtn;
 
-    // ── Tab bar (algo switcher) ────────────────────────────────────────────────
-    QTabBar *tabBar;
-
     // ── Shared plots (dock content, reused for all algos) ─────────────────────
     Plot *currentBatteryPlot;
     Plot *currentPlatformPlot;
     Plot *currentSystemPlot;
     Plot *voltagePlot;
     Plot *socPlot;
+    Plot *socErrorDiffPlot;
 
     // ── Dock widgets ──────────────────────────────────────────────────────────
     QDockWidget *currentBatteryDock;
@@ -145,6 +164,7 @@ private:
     QDockWidget *currentPlatformDock;
     QDockWidget *voltageDock;
     QDockWidget *socDock;
+    QDockWidget *socAlgoDiffDock;
     QDockWidget *logDock;
     QDockWidget *tabDock;
 
@@ -193,5 +213,29 @@ private:
     double endSoC     = 0.0;
     algoTimeTableDuration_e algoSelected = LP;
 };
+
+
+// ── Protypes of functions ─────────────────────────────────────────────────────────────────
+
+/* This function is handler that is being called when we call either qDebug, qWarning, qCritical...
+    We installed this handler with function qInstallMessageHandler in constructor of our class SimWind */
+void logHandler(QtMsgType type, const QMessageLogContext &, const QString &msg);
+
+
+/* This function only formats in QString totalSeconds in format :
+ * hh:mm:ss
+   We use this in tables for logging time of each algo etc... */
+static QString formatSeconds(float totalSeconds);
+
+
+/* Extract based on time table algo name and returns that string */
+static QString algoTabName(algoTimeTableDuration_e algo);
+
+
+// Gives hardcoded file paths for each algo
+static QString algoFlagsPath(algoTimeTableDuration_e algo);
+
+// Hardcoded output path based on time table of algo
+static QString algoOutputPath(algoTimeTableDuration_e algo);
 
 #endif // SIMULATORWND_H

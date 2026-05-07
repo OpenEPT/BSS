@@ -60,7 +60,7 @@ public:
 
     void algoInit(const algoConfig_t &config);
     void              setAlgoDynamics(const QVector<algoFlags_t>& flags);
-    void              algoReset();
+    void algoReset(float socReference = 1.0f);
 
     algoCurrentInfo_t preProcessing();
     void              processing(double iBat);

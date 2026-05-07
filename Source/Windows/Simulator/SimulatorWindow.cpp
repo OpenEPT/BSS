@@ -9,169 +9,7 @@
 #include "SimulatorWindow.h"
 #include <QtConcurrent>
 
-/*******************************************************************************
- * Global log console
- ******************************************************************************/
-QTextEdit *g_logConsole = nullptr;
-
-void logHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
-{
-    if (!g_logConsole) return;
-    QString prefix;
-    switch (type) {
-    case QtDebugMsg:    prefix = "[DEBUG] "; break;
-    case QtWarningMsg:  prefix = "[WARN]  "; break;
-    case QtCriticalMsg: prefix = "[ERROR] "; break;
-    default: break;
-    }
-    QMetaObject::invokeMethod(g_logConsole, "append",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, prefix + msg));
-}
-
-static QString formatSeconds(float totalSeconds)
-{
-    int h = (int)(totalSeconds / 3600);
-    int m = (int)((totalSeconds - h * 3600) / 60);
-    int s = (int)(totalSeconds - h * 3600 - m * 60);
-    return QString("%1h %2m %3s")
-        .arg(h, 2, 10, QChar('0'))
-        .arg(m, 2, 10, QChar('0'))
-        .arg(s, 2, 10, QChar('0'));
-}
-
-QTableWidget* SimulatorWnd::createResultsTable(
-    double avgBat, double avgSys,
-    lastSimulationStepsValues finalResults,
-    float timeElapsed, int totalSamples,
-    const QString &algoName)
-{
-    QTableWidget *table = new QTableWidget();
-    table->setColumnCount(2);
-    table->horizontalHeader()->setVisible(false);
-    table->horizontalHeader()->setStretchLastSection(true);
-    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    table->verticalHeader()->setVisible(false);
-    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table->setSelectionMode(QAbstractItemView::NoSelection);
-    table->setFocusPolicy(Qt::NoFocus);
-    table->setAlternatingRowColors(true);
-    table->setShowGrid(false);
-
-    // Lambda helpers
-    auto addSeparator = [&](const QString &title) {
-        int row = table->rowCount();
-        table->insertRow(row);
-        QTableWidgetItem *item = new QTableWidgetItem(" " + title);
-        QFont f = item->font(); f.setBold(true); item->setFont(f);
-        item->setBackground(QColor("#efefef"));
-        table->setItem(row, 0, item);
-        QTableWidgetItem *empty = new QTableWidgetItem("");
-        empty->setBackground(QColor("#efefef"));
-        table->setItem(row, 1, empty);
-        table->setRowHeight(row, 20);
-    };
-
-    auto addRow = [&](const QString &label, const QString &value, bool bold = false) {
-        int row = table->rowCount();
-        table->insertRow(row);
-        table->setItem(row, 0, new QTableWidgetItem(label));
-        QTableWidgetItem *valItem = new QTableWidgetItem(value);
-        valItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        if (bold) {
-            QFont f = valItem->font(); f.setBold(true); valItem->setFont(f);
-        }
-        table->setItem(row, 1, valItem);
-        table->setRowHeight(row, 24);
-    };
-
-    // Calculations
-    platform_current_mah_e pc = PLATFORM_CURRENT_ESP;
-    if      (selectedPlatform == "NXP")   pc = PLATFORM_CURRENT_NXP;
-    else if (selectedPlatform == "STM32") pc = PLATFORM_CURRENT_STM;
-    else if (selectedPlatform == "NRF")   pc = PLATFORM_CURRENT_NRF;
-    float current = static_cast<float>(pc);
-
-    QTime time = QTime::fromMSecsSinceStartOfDay(static_cast<int>(timeElapsed * 1000));
-    QString formattedTime = time.toString("hh'h' mm'm' ss's'");
-
-    double deltaSOC    = (initialSoC * 100.0) - finalResults.lastSoC;
-    double capacityMah = 0.0;
-    if (deltaSOC > 0.0)
-        capacityMah = (finalResults.lastElectricChargeBattery / deltaSOC) * 100.0;
-
-    double avgSysMa = avgSys * 1000.0;
-    double avgBatMa = avgBat * 1000.0;
-
-    float maxOpTime = (avgSysMa > 0.0) ? (float)((capacityMah / avgSysMa) * 3600.0) : 0.0f;
-    float sysOpTime = (avgBatMa > 0.0) ? (float)((capacityMah / avgBatMa) * 3600.0) : 0.0f;
-    float algoCost  = maxOpTime - sysOpTime;
-
-    // Fill table
-    addSeparator("General");
-    addRow("Platform",      selectedPlatform);
-    if (!algoName.isEmpty()) addRow("Algorithm", algoName);
-    addRow("Total Samples", QString::number(totalSamples));
-
-    addSeparator("State of Charge");
-    addRow("Initial SoC Battery", QString("%1 %").arg(initialSoC * 100.0, 0, 'f', 1));
-    addRow("Final SoC Battery",   QString("%1 %").arg(finalResults.lastSoC, 0, 'f', 2));
-    addRow("Initial SoC System",  QString("%1 %").arg(initialSoC * 100.0, 0, 'f', 1));
-    addRow("Final SoC System",    QString("%1 %").arg(finalResults.lastSoCIsys, 0, 'f', 2));
-
-    addSeparator("Voltage");
-    addRow("Final Terminal Voltage", QString("%1 V").arg(finalResults.lastVBat, 0, 'f', 4));
-
-    addSeparator("Current");
-    addRow("Avg Battery Current", QString("%1 mA").arg(avgBatMa, 0, 'f', 4));
-    addRow("Avg System Current",  QString("%1 mA").arg(avgSysMa, 0, 'f', 4));
-    addRow("Platform Current",    QString("%1 mA").arg(current,  0, 'f', 4));
-
-    addSeparator("Electric Charge");
-    addRow("Battery Capacity", QString("%1 mAh").arg(capacityMah, 0, 'f', 2));
-    addRow("Charge Battery",   QString("%1 mAh").arg(finalResults.lastElectricChargeBattery, 0, 'f', 4));
-    addRow("Charge System",    QString("%1 mAh").arg(finalResults.lastElectricChargeSystem,  0, 'f', 4));
-    addRow("Charge Algo",      QString("%1 mAh").arg(finalResults.lastElectricChargeAlgo,    0, 'f', 4));
-
-    addSeparator("Time");
-    addRow("Simulation Time",    formattedTime);
-    addRow("Maximal Oper. Time", formatSeconds(maxOpTime));
-    addRow("System Oper. Time",  formatSeconds(sysOpTime));
-    addRow("Algo Time Cost",     formatSeconds(algoCost), true);
-
-    return table;
-}
-
-/*******************************************************************************
- * Static helpers
- ******************************************************************************/
-static QString algoTabName(algoTimeTableDuration_e algo)
-{
-    switch (algo) {
-    case K0:             return "K0";
-    case K2:             return "K2";
-    case LP:             return "LP";
-    case ADAPTIVE_LP_K2: return "Adaptive";
-    default:             return "Unknown";
-    }
-}
-
-static QString algoFlagsPath(algoTimeTableDuration_e algo)
-{
-    switch (algo) {
-    case K0:  return "/home/filip/Projects/Master/Params/flags_k0.csv";
-    case K2:  return "/home/filip/Projects/Master/Params/flags_k2.csv";
-    case LP:  return "/home/filip/Projects/Master/Params/flags_lp.csv";
-    default:  return "/home/filip/Projects/Master/Params/flags_adaptive.csv";
-    }
-}
-
-static QString algoOutputPath(algoTimeTableDuration_e algo)
-{
-    return QString("/home/filip/Projects/Master/Output/output_%1.csv")
-        .arg(algoTabName(algo));
-}
-
+QTextEdit *g_logConsole = nullptr; // Global pointer for logging handler
 
 /*******************************************************************************
  * Constructor
@@ -182,32 +20,31 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     , timerPeriodMs(10)
     , currentSample(0)
 {
-    /* Constructors ************************************************************/
+    // ── Constructors ─────────────────────────────────────────────────────────────────
     batteryModel       = new BatteryModel(this);
     platformCurrent    = new PlatformCurrent(PLATFORM_CURRENT_ESP, this);
     timeTable          = new TimeTable(K2, this);
     simulatorContainer = new SimulatorContainer(batteryModel, platformCurrent, timeTable, this);
 
-    /* Timers ******************************************************************/
-    timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &SimulatorWnd::onTimerTick);
+    // ── Timers ─────────────────────────────────────────────────────────────────
+    timer = new QTimer(this); // Online simu
 
-    ledTimer = new QTimer(this);
+    ledTimer = new QTimer(this); // Led timer (status bar diode)
     ledTimer->setInterval(500);
     ledTimer->start();
-    connect(ledTimer, &QTimer::timeout, this, &SimulatorWnd::onLedTimerTimeout);
 
+    // ── Tool Bar ─────────────────────────────────────────────────────────────────
+    QToolBar *toolBar = new QToolBar(this);
+    toolBar->setMovable(false);
+    toolBar->setFloatable(false);
 
-    /* ToolBar *****************************************************************/
-    QToolBar *tabToolBar = new QToolBar(this);
-    tabToolBar->setMovable(false);
-    tabToolBar->setFloatable(false);
-
+    // Create push buttons
     playBtn    = new QPushButton("Play");
     stopBtn    = new QPushButton("Stop");
     pauseBtn   = new QPushButton("Pause");
     speedUpBtn = new QPushButton("1x");
 
+    // Create tool buttons
     configBtn  = new QToolButton(this);
     configBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/conf.jpeg"));
     configBtn->setFixedSize(30, 30);
@@ -220,123 +57,142 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     simulationSettingsBtn->setIcon(QIcon("/home/filip/Projects/Master/GUI/Documentation/img/simulation_config_icon.jpeg"));
     simulationSettingsBtn->setFixedSize(30, 30);
 
-
-
+    // Enabling buttons
     playBtn->setEnabled(false);
     stopBtn->setEnabled(false);
     pauseBtn->setEnabled(false);
     speedUpBtn->setEnabled(false);
-    configBtn->setEnabled(true);
+    configBtn->setEnabled(true);   // True
     logInfoBtn->setEnabled(false);
     simulationSettingsBtn->setEnabled(false);
 
-    tabToolBar->addWidget(playBtn);
-    tabToolBar->addWidget(stopBtn);
-    tabToolBar->addWidget(pauseBtn);
-    tabToolBar->addWidget(speedUpBtn);
-    tabToolBar->addWidget(configBtn);
-    tabToolBar->addWidget(simulationSettingsBtn);
-    tabToolBar->addWidget(logInfoBtn);
+    // Add buttons in Tab Tool Bar
+    toolBar->addWidget(playBtn);
+    toolBar->addWidget(stopBtn);
+    toolBar->addWidget(pauseBtn);
+    toolBar->addWidget(speedUpBtn);
+    toolBar->addWidget(configBtn);
+    toolBar->addWidget(simulationSettingsBtn);
+    toolBar->addWidget(logInfoBtn);
 
-    addToolBar(Qt::TopToolBarArea, tabToolBar);
+    // Set tool bar on the top of the window area
+    addToolBar(Qt::TopToolBarArea, toolBar);
 
-    /* TAB BAR ***************************************************************/
-    tabBar = new QTabBar(this);
-    tabBar->setExpanding(true);
-    tabBar->setDrawBase(false);
-
-    connect(tabBar, &QTabBar::currentChanged, this, &SimulatorWnd::onTabChanged);
-
-    setMenuWidget(tabBar);
-
-    /* Plots *******************************************************************/
+    // ── Plots ─────────────────────────────────────────────────────────────────
     currentBatteryPlot  = new Plot(400, 100, false, this);
     currentSystemPlot   = new Plot(400, 100, false, this);
     currentPlatformPlot = new Plot(400, 100, false, this);
     voltagePlot         = new Plot(400, 100, false, this);
-    socPlot             = new Plot(400, 100, false, this, true);
+    socPlot             = new Plot(400, 100, false, this);
+    socErrorDiffPlot    = new Plot(400, 100, false, this);
 
+    // Current Battery plot
     currentBatteryPlot->setTitle("Battery Current");
     currentBatteryPlot->setYLabel("[A]");
     currentBatteryPlot->setXLabel("[s]");
 
+    // Current System plot
     currentSystemPlot->setTitle("System Current");
     currentSystemPlot->setYLabel("[A]");
     currentSystemPlot->setXLabel("[s]");
 
+    // Current Platform plot
     currentPlatformPlot->setTitle("Platform Current");
     currentPlatformPlot->setYLabel("[A]");
     currentPlatformPlot->setXLabel("[s]");
 
+    // Voltage Terminal plot
     voltagePlot->setTitle("Battery Voltage");
     voltagePlot->setYLabel("[V]");
     voltagePlot->setXLabel("[s]");
 
+    // SoC plot
     socPlot->setTitle("Battery SoC");
     socPlot->setYLabel("[%]");
     socPlot->setXLabel("[s]");
-    socPlot->setGraphName(0, "SoC Battery");
-    socPlot->addLineGraph(QColor(255, 100, 0), "SoC Isys");
 
-    currentBatteryPlot->setMinimumHeight(100);
-    currentSystemPlot->setMinimumHeight(100);
-    currentPlatformPlot->setMinimumHeight(100);
-    voltagePlot->setMinimumHeight(100);
-    socPlot->setMinimumHeight(100);
+    // SoC algo diff plot
+    socErrorDiffPlot->setTitle("SoC Error Difference");
+    socErrorDiffPlot->setYLabel("[%]");
+    socErrorDiffPlot->setXLabel("[s]");
 
-    /* Log console *************************************************************/
+    // Set height of plots
+    currentBatteryPlot->setMinimumHeight(150);
+    currentSystemPlot->setMinimumHeight(150);
+    currentPlatformPlot->setMinimumHeight(150);
+    voltagePlot->setMinimumHeight(150);
+    socPlot->setMinimumHeight(150);
+    socErrorDiffPlot->setMinimumHeight(150);
+
+    // ── Log console ─────────────────────────────────────────────────────────────────
     logConsole = new QTextEdit(this);
     logConsole->setReadOnly(true);
     logConsole->setMaximumHeight(150);
-    logConsole->setStyleSheet(
-        "background-color: #1e1e1e; color: #d4d4d4; font-family: monospace;");
+    logConsole->setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: monospace;");
     g_logConsole = logConsole;
     qInstallMessageHandler(logHandler);
 
-    /* Dock widgets ************************************************************/
+    // ── Dock  ─────────────────────────────────────────────────────────────────
+
+    // Current battery dock
     currentBatteryDock = new QDockWidget("Battery Current", this);
     currentBatteryDock->setWidget(currentBatteryPlot);
 
+    // Current system dock
     currentSystemDock = new QDockWidget("System Current", this);
     currentSystemDock->setWidget(currentSystemPlot);
 
+    // Current platform dock
     currentPlatformDock = new QDockWidget("Platform Current", this);
     currentPlatformDock->setWidget(currentPlatformPlot);
 
+    // Voltage terminal dock
     voltageDock = new QDockWidget("Battery Voltage", this);
     voltageDock->setWidget(voltagePlot);
 
-    socDock = new QDockWidget("SOC", this);
+    // SoC dock
+    socDock = new QDockWidget("SoC", this);
     socDock->setWidget(socPlot);
 
+    // SoC algo diff dock
+    socAlgoDiffDock = new QDockWidget("SoC Error Difference", this);
+    socAlgoDiffDock->setWidget(socErrorDiffPlot);
+
+    // Logging console dock
     logDock = new QDockWidget("Log Console", this);
     logDock->setWidget(logConsole);
 
+    // Add widgets in docks
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
     addDockWidget(Qt::LeftDockWidgetArea,   currentBatteryDock);
     addDockWidget(Qt::LeftDockWidgetArea,   currentSystemDock);
     addDockWidget(Qt::LeftDockWidgetArea,   currentPlatformDock);
     addDockWidget(Qt::RightDockWidgetArea,  voltageDock);
     addDockWidget(Qt::RightDockWidgetArea,  socDock);
+    addDockWidget(Qt::RightDockWidgetArea,  socAlgoDiffDock);
 
+    // Split docks area
     splitDockWidget(currentBatteryDock,  currentSystemDock,   Qt::Vertical);
     splitDockWidget(currentSystemDock,   currentPlatformDock, Qt::Vertical);
     splitDockWidget(voltageDock,         socDock,             Qt::Vertical);
 
+    // Resize dock area
     resize(1600, 1000);
 
-    /* Status bar *****************************************************************/
+    // ── Status Bar ─────────────────────────────────────────────────────────────────
     statusBar()->setStyleSheet("border-top: 1px solid palette(mid); padding: 2px;");
 
+    // Labels for each element in status bar
     ledConfigLabel            = new QLabel(this);
     ledPlaySimulationLabel    = new QLabel(this);
     statusConfigLabel         = new QLabel(this);
     statusPlaySimulationLabel = new QLabel(this);
 
+    // Progress bar
     progressBar = new QProgressBar(this);
     progressBar->setRange(0, 100);
     progressBar->setValue(0);
-    progressBar->setFixedWidth(200);
+    progressBar->setFixedWidth(400);
     progressBar->setFixedHeight(25);
     progressBar->setTextVisible(true);
 
@@ -355,8 +211,9 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     statusBar()->addWidget(ledConfigLabel);
     statusBar()->addPermanentWidget(progressBar);
 
+    // ── Connections ─────────────────────────────────────────────────────────────────
 
-    /* Button connections *********************************************************/
+    // Button connections
     connect(playBtn,    &QPushButton::clicked, this, &SimulatorWnd::onPlayClicked);
     connect(stopBtn,    &QPushButton::clicked, this, &SimulatorWnd::onStopClicked);
     connect(pauseBtn,   &QPushButton::clicked, this, &SimulatorWnd::onPauseClicked);
@@ -366,7 +223,7 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
     connect(simulationSettingsBtn, &QToolButton::clicked, this, &SimulatorWnd::onSimuSettingsClicked);
 
 
-    /* Online dataSample connection ***********************************************/
+    // Online dataSample connection
     connect(simulatorContainer, &SimulatorContainer::dataSample, this,
             [=](float timeS, double vBat, float iSys, float iPlatform,
                 float iBat, float socPct, float socIsysPct)
@@ -401,7 +258,7 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
             }, Qt::QueuedConnection);
 
 
-    /* Load signals ***************************************************************/
+    // Load signals
     connect(simulatorContainer, &SimulatorContainer::loadSuccess, this,
             [=]{
                 playBtn->setEnabled(true);
@@ -411,70 +268,13 @@ SimulatorWnd::SimulatorWnd(QWidget *parent)
             [=](const QString &msg){
                 qDebug() << "Load error:" << msg;
             });
-}
-/*******************************************************************************
- * clearAlgoTabs
- ******************************************************************************/
-void SimulatorWnd::clearAlgoTabs()
-{
-    while (tabBar->count() > 0)
-        tabBar->removeTab(0);
 
-    for (auto &tab : algoTabs) {
-        delete tab.container;
-        delete tab.batteryModel;
-        delete tab.timeTable;
-    }
-
-    tabBar->setMaximumHeight(QWIDGETSIZE_MAX);
-    tabBar->setMinimumHeight(0);
-    tabBar->setFixedHeight(0);
-    tabBar->setVisible(false);
-
-    algoTabs.clear();
-    tabBar->setVisible(false);
+    // Timer connections
+    connect(timer, &QTimer::timeout, this, &SimulatorWnd::onTimerTick);
+    connect(ledTimer, &QTimer::timeout, this, &SimulatorWnd::onLedTimerTimeout);
 }
 
-/*******************************************************************************
- * replotActiveTab - pushes data of active tab into the shared plots
- ******************************************************************************/
 void SimulatorWnd::replotActiveTab()
-{
-    int idx = tabBar->currentIndex();
-    if (idx < 0 || idx >= algoTabs.size()) return;
-
-    const algoTab_t &tab = algoTabs[idx];
-
-    // Reset on 2 graphs
-    socPlot->clearAllGraphs();
-    socPlot->addLineGraph(QColor(255, 100, 0), "SoC System");  // graph(1)
-    socPlot->setGraphName(0, "SoC Battery"); // graph(0)
-    socPlot->setData(tab.simulatorSample.soc.battery, tab.simulatorSample.time);
-    socPlot->setSecondGraphData(tab.simulatorSample.soc.system, tab.simulatorSample.time);
-
-    // Other plots
-    voltagePlot->clearAllGraphs();
-    currentBatteryPlot->clearAllGraphs();
-    currentSystemPlot->clearAllGraphs();
-    currentPlatformPlot->clearAllGraphs();
-
-    voltagePlot->enableLegend(false);
-    currentBatteryPlot->enableLegend(false);
-
-    currentBatteryPlot->setData (tab.simulatorSample.current.battery,  tab.simulatorSample.time);
-    currentSystemPlot->setData  (tab.simulatorSample.current.system,   tab.simulatorSample.time);
-    currentPlatformPlot->setData(tab.simulatorSample.current.platform, tab.simulatorSample.time);
-    voltagePlot->setData        (tab.simulatorSample.voltage.battery,  tab.simulatorSample.time);
-
-    currentBatteryPlot->replotAll();
-    currentSystemPlot->replotAll();
-    currentPlatformPlot->replotAll();
-    voltagePlot->replotAll();
-    socPlot->replotAll();
-}
-
-
-void SimulatorWnd::replotCompareTab()
 {
     static const QList<QColor> colors = {
         QColor(40,  110, 255), QColor(255, 100,   0), QColor(0,   180,   0),
@@ -486,82 +286,124 @@ void SimulatorWnd::replotCompareTab()
         QColor(200, 200,   0), QColor(100,   0, 200),
     };
 
+    // Clear current plots
     socPlot->clearAllGraphs();
     voltagePlot->clearAllGraphs();
     currentBatteryPlot->clearAllGraphs();
+    currentPlatformPlot->clearAllGraphs();
+    currentSystemPlot->clearAllGraphs();
+    socErrorDiffPlot->clearAllGraphs();
 
+    // Enable legends for all graphs that need it
+    currentPlatformPlot->enableLegend(true);
     socPlot->enableLegend(true);
+    socErrorDiffPlot->enableLegend(true);
     voltagePlot->enableLegend(true);
     currentBatteryPlot->enableLegend(true);
 
-    // graph(0) = SoCIsys - sivi, tačkasta, deblja
+    // SocIsys GRAPH(0)
     socPlot->setGraphLineStyle(0, Qt::DotLine, QColor(0, 0, 0), "SoC Isys");
     socPlot->setGraphLineWidth(0, 2);
     socPlot->setGraphData(0, algoTabs[0].simulatorSample.soc.system,
                           algoTabs[0].simulatorSample.time);
 
+    // Plot System current, it's the same for all algo
+    currentSystemPlot->setGraphData(0, algoTabs[0].simulatorSample.current.system,
+                          algoTabs[0].simulatorSample.time);
+
     int graphIdx = 1;
-    int voltageIdx = 0;
+    int plotIdx = 0;
+
+    // This info is for plot on soc error difference
+    QVector<double> socError = {0};
+
+    // Plot all other graphs
     for (int i = 0; i < algoTabs.size(); i++) {
 
-        // Preskoci ako nije selektovan
-        bool show = (i < visibleAlgosInCompare.size()) ?
-                        visibleAlgosInCompare[i] : true;
+        // Check if algo is selected in simulation settings
+        bool show = (i < visibleAlgosInCompare.size()) ? visibleAlgosInCompare[i] : true;
+
+        // If it's not selected skip algo, doesn't need to be plotted
         if (!show) continue;
 
+
+        // take algo tab
         const algoTab_t &tab = algoTabs[i];
         QColor colorAlgo   = colors[i % colors.size()];
         QColor colorSoCBat = colorAlgo.lighter(140);
 
-        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine, 2);
-        socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.battery,
-                              tab.simulatorSample.time);
+        // Reload the value
+        socError = {0};
 
+        for(int j = 0; j < tab.simulatorSample.soc.algoSoc.size(); j++){
+            socError.append(tab.simulatorSample.soc.algoSoc[j] - tab.simulatorSample.soc.battery[j]);
+        }
+
+        // ── SoC ───────────────────────────────────────────────────────────────────────────────────
+
+        // First soc plot is referent soc bat
+        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine, 2);
+        socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.battery, tab.simulatorSample.time);
+
+        // Other plot is real algo soc
         socPlot->addLineGraph(colorAlgo, tab.algoName + " AlgoSoC");
         socPlot->setGraphLineWidth(graphIdx, 2);
-        socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.algoSoc,
-                              tab.simulatorSample.time);
+        socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.algoSoc, tab.simulatorSample.time);
 
-        if (voltageIdx == 0) {
+        // ── Voltage, Battery & Platform Current ───────────────────────────────────────────────────
+        if (plotIdx == 0) {
+            // Voltage plot
             voltagePlot->setGraphName(0, tab.algoName);
             voltagePlot->setGraphLineWidth(0, 2);
             voltagePlot->setData(tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
+
+            // Current Battery plot
             currentBatteryPlot->setGraphName(0, tab.algoName);
             currentBatteryPlot->setGraphLineWidth(0, 2);
             currentBatteryPlot->setData(tab.simulatorSample.current.battery, tab.simulatorSample.time);
+
+            // Current platform plot
+            currentPlatformPlot->setGraphName(0, tab.algoName);
+            currentPlatformPlot->setGraphLineWidth(0, 2);
+            currentPlatformPlot->setData(tab.simulatorSample.current.platform, tab.simulatorSample.time);
+
+            // Soc Error Difference
+            socErrorDiffPlot->setGraphName(0, tab.algoName);
+            socErrorDiffPlot->setGraphLineWidth(0, 2);
+            socErrorDiffPlot->setData(socError, tab.simulatorSample.time);
+
         } else {
+            // Voltage plot
             voltagePlot->addLineGraph(colorAlgo, tab.algoName);
-            voltagePlot->setGraphLineWidth(voltageIdx, 2);
-            voltagePlot->setGraphData(voltageIdx, tab.simulatorSample.voltage.battery,
-                                      tab.simulatorSample.time);
+            voltagePlot->setGraphLineWidth(plotIdx, 2);
+            voltagePlot->setGraphData(plotIdx, tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
+
+            // Current Battery plot
             currentBatteryPlot->addLineGraph(colorAlgo, tab.algoName);
-            currentBatteryPlot->setGraphLineWidth(voltageIdx, 2);
-            currentBatteryPlot->setGraphData(voltageIdx, tab.simulatorSample.current.battery,
-                                             tab.simulatorSample.time);
+            currentBatteryPlot->setGraphLineWidth(plotIdx, 2);
+            currentBatteryPlot->setGraphData(plotIdx, tab.simulatorSample.current.battery, tab.simulatorSample.time);
+
+            // Current platform plot
+            currentPlatformPlot->addLineGraph(colorAlgo, tab.algoName);
+            currentPlatformPlot->setGraphLineWidth(plotIdx, 2);
+            currentPlatformPlot->setGraphData(plotIdx, tab.simulatorSample.current.platform, tab.simulatorSample.time);
+
+            // Soc Error Difference
+            socErrorDiffPlot->addLineGraph(colorAlgo, tab.algoName);
+            socErrorDiffPlot->setGraphLineWidth(plotIdx, 2);
+            socErrorDiffPlot->setGraphData(plotIdx, socError, tab.simulatorSample.time);
         }
-        voltageIdx++;
+        plotIdx++;
     }
 
-    socPlot->setAllGraphsInteractable(true);
-    voltagePlot->setAllGraphsInteractable(true);
-    currentBatteryPlot->setAllGraphsInteractable(true);
-
+    // Replot all graphs
     socPlot->replotAll();
+    socErrorDiffPlot->replotAll();
     voltagePlot->replotAll();
     currentBatteryPlot->replotAll();
+    currentPlatformPlot->replotAll();
 }
 
-/*******************************************************************************
- * onTabChanged
- ******************************************************************************/
-void SimulatorWnd::onTabChanged(int index)
-{
-    if (index == algoTabs.size()) {
-        replotCompareTab();
-        return;
-    }
-    replotActiveTab();
-}
 /*******************************************************************************
  * onTimerTick - online mode
  ******************************************************************************/
@@ -571,29 +413,43 @@ void SimulatorWnd::onTimerTick()
 }
 
 /*******************************************************************************
+ * clearAlgoTabs - deletes all algo containers and clears the list
+ ******************************************************************************/
+void SimulatorWnd::clearAlgoTabs()
+{
+    // Delete all allocated objects for each algo tab
+    for (auto &tab : algoTabs) {
+        delete tab.container;
+        delete tab.batteryModel;
+        delete tab.timeTable;
+        delete tab.platformCurrent;
+    }
+
+    // Clear the list
+    algoTabs.clear();
+}
+
+/*******************************************************************************
  * onConfigClicked
  ******************************************************************************/
 void SimulatorWnd::onConfigClicked()
 {
     QDialog *dialog = new QDialog(this);
     dialog->setWindowTitle("Config");
-    dialog->resize(1100, 600);
+    dialog->resize(1000, 1000);
 
     QVBoxLayout *mainLayout   = new QVBoxLayout(dialog);
-    QHBoxLayout *groupsLayout = new QHBoxLayout();
 
     // ── Group boxes ───────────────────────────────────────────────────────────
     QGroupBox *graphicsGroup         = new QGroupBox("Choose Graphics");
     QGroupBox *inputFilesGroup       = new QGroupBox("Choose Files");
     inputFilesGroup->setFixedWidth(600);
-    QGroupBox *algoGroup             = new QGroupBox("Choose Algo");
     QGroupBox *analysisGroupBox      = new QGroupBox("Choose Analysis");
     QGroupBox *choosePlatformGroupBox= new QGroupBox("Choose Platform");
 
     // ── Layouts ───────────────────────────────────────────────────────────────
     QVBoxLayout *leftGroup          = new QVBoxLayout();
     QVBoxLayout *rightFilesGroup    = new QVBoxLayout();
-    QVBoxLayout *rightAlgoGroup     = new QVBoxLayout();
     QVBoxLayout *analysisLayout     = new QVBoxLayout();
     QVBoxLayout *choosePlatformLayout = new QVBoxLayout();
 
@@ -603,23 +459,149 @@ void SimulatorWnd::onConfigClicked()
     QButtonGroup *analysisBtnGroup = new QButtonGroup(dialog);
     analysisBtnGroup->addButton(onlineAnalysys);
     analysisBtnGroup->addButton(offlineAnalysys);
-    onlineAnalysys->setChecked(true);
+    offlineAnalysys->setChecked(true);
     analysisLayout->addWidget(onlineAnalysys);
     analysisLayout->addWidget(offlineAnalysys);
     analysisGroupBox->setLayout(analysisLayout);
 
-    // ── Algo checkboxes ───────────────────────────────────────────────────────
-    QCheckBox *k0       = new QCheckBox("K0");
-    QCheckBox *k2       = new QCheckBox("K2");
-    QCheckBox *lp       = new QCheckBox("LP");
-    QCheckBox *adaptive = new QCheckBox("Adaptive");
-    k0->setChecked(true);
+    // ── Algo Configuration group ──────────────────────────────────────────────
+    QGroupBox   *algoConfigGroup  = new QGroupBox("Algo Configuration");
+    QHBoxLayout *algoConfigLayout = new QHBoxLayout();  // ← horizontalni: levo kontrole, desno tabela
+    algoConfigLayout->setSpacing(8);
+    algoConfigLayout->setContentsMargins(8, 8, 8, 8);
 
-    rightAlgoGroup->addWidget(k0);
-    rightAlgoGroup->addWidget(k2);
-    rightAlgoGroup->addWidget(lp);
-    rightAlgoGroup->addWidget(adaptive);
-    algoGroup->setLayout(rightAlgoGroup);
+    // ── Levo: kontrole u grid layoutu ────────────────────────────────────────
+    QComboBox *algoCombo     = new QComboBox();
+    QComboBox *platformCombo = new QComboBox();
+    QComboBox *modeCombo     = new QComboBox();
+    QSpinBox  *periodSpin    = new QSpinBox();
+    QComboBox *battCombo     = new QComboBox();
+    QPushButton *addBtn      = new QPushButton("+ Add");
+
+    algoCombo->addItem("K0",       QVariant::fromValue((int)K0));
+    algoCombo->addItem("K2",       QVariant::fromValue((int)K2));
+    algoCombo->addItem("LP",       QVariant::fromValue((int)LP));
+    algoCombo->addItem("Adaptive", QVariant::fromValue((int)ADAPTIVE_LP_K2));
+
+    platformCombo->addItem("ESP32", QVariant::fromValue((int)PLATFORM_CURRENT_ESP));
+    platformCombo->addItem("NXP",   QVariant::fromValue((int)PLATFORM_CURRENT_NXP));
+    platformCombo->addItem("STM32", QVariant::fromValue((int)PLATFORM_CURRENT_STM));
+    platformCombo->addItem("NRF",   QVariant::fromValue((int)PLATFORM_CURRENT_NRF));
+
+    modeCombo->addItem("From File", QVariant::fromValue((int)ALGO_PERIOD_FROM_FILE));
+    modeCombo->addItem("Fixed",     QVariant::fromValue((int)ALGO_PERIOD_FIXED));
+
+    periodSpin->setRange(1, 100000);
+    periodSpin->setValue(100);
+    periodSpin->setEnabled(false);
+
+    battCombo->addItem("457 mAh",  457);
+    battCombo->addItem("1000 mAh", 1000);
+    battCombo->addItem("2000 mAh", 2000);
+
+    addBtn->setFixedWidth(80);
+
+    connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            [=](int idx) { periodSpin->setEnabled(idx == 1); });
+
+    // Grid: label u col 0, widget u col 1
+    QGridLayout *controlsGrid = new QGridLayout();
+    controlsGrid->setSpacing(6);
+    controlsGrid->addWidget(new QLabel("Algo:"),            0, 0, Qt::AlignRight);
+    controlsGrid->addWidget(algoCombo,                      0, 1);
+    controlsGrid->addWidget(new QLabel("Platform:"),        1, 0, Qt::AlignRight);
+    controlsGrid->addWidget(platformCombo,                  1, 1);
+    controlsGrid->addWidget(new QLabel("Mode:"),            2, 0, Qt::AlignRight);
+    controlsGrid->addWidget(modeCombo,                      2, 1);
+    controlsGrid->addWidget(new QLabel("Period [samples]:"),3, 0, Qt::AlignRight);
+    controlsGrid->addWidget(periodSpin,                     3, 1);
+    controlsGrid->addWidget(new QLabel("Battery:"),         4, 0, Qt::AlignRight);
+    controlsGrid->addWidget(battCombo,                      4, 1);
+    controlsGrid->addWidget(addBtn,                         5, 1, Qt::AlignLeft);
+    controlsGrid->setColumnStretch(1, 1);
+    controlsGrid->setRowStretch(6, 1);  // ← potisni kontrole gore
+
+    QWidget *controlsWidget = new QWidget();
+    controlsWidget->setLayout(controlsGrid);
+    controlsWidget->setFixedWidth(280);  // ← fiksna širina leve strane
+
+    // ── Desno: tabela + remove dugme ─────────────────────────────────────────
+    QVBoxLayout *tableLayout = new QVBoxLayout();
+
+    QTableWidget *algoTable = new QTableWidget(0, 5);
+    algoTable->setHorizontalHeaderLabels({"Algo", "Platform", "Mode", "Period [samples]", "Battery"});
+    algoTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    algoTable->verticalHeader()->setVisible(true);
+    algoTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    algoTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    algoTable->setAlternatingRowColors(true);
+    algoTable->setShowGrid(true);
+    algoTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    algoTable->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+
+    // ── Restore saved table rows ──────────────────────────────────────────────
+    for (const algoTableRow_t &row : savedAlgoTableRows) {
+        int r = algoTable->rowCount();
+        algoTable->insertRow(r);
+        algoTable->setRowHeight(r, 28);
+        algoTable->setItem(r, 0, new QTableWidgetItem(row.algoText));
+        algoTable->setItem(r, 1, new QTableWidgetItem(row.platformText));
+        algoTable->setItem(r, 2, new QTableWidgetItem(row.modeText));
+        algoTable->setItem(r, 3, new QTableWidgetItem(row.periodText));
+        algoTable->setItem(r, 4, new QTableWidgetItem(row.batteryText));
+        algoTable->item(r, 0)->setData(Qt::UserRole, row.algoData);
+        algoTable->item(r, 1)->setData(Qt::UserRole, row.platformData);
+        algoTable->item(r, 2)->setData(Qt::UserRole, row.modeData);
+        algoTable->item(r, 3)->setData(Qt::UserRole, row.periodValue);
+        algoTable->item(r, 4)->setData(Qt::UserRole, row.batteryData);
+        for (int c = 0; c < 5; c++)
+            algoTable->item(r, c)->setTextAlignment(Qt::AlignCenter);
+    }
+
+    QPushButton *removeBtn = new QPushButton("Remove Selected");
+    removeBtn->setFixedHeight(28);
+
+    tableLayout->addWidget(algoTable, 1);
+    tableLayout->addWidget(removeBtn);
+
+    // ── Add logika ────────────────────────────────────────────────────────────
+    connect(addBtn, &QPushButton::clicked, [=]() {
+        int row = algoTable->rowCount();
+        algoTable->insertRow(row);
+        algoTable->setRowHeight(row, 28);
+
+        algoTable->setItem(row, 0, new QTableWidgetItem(algoCombo->currentText()));
+        algoTable->setItem(row, 1, new QTableWidgetItem(platformCombo->currentText()));
+        algoTable->setItem(row, 2, new QTableWidgetItem(modeCombo->currentText()));
+        algoTable->setItem(row, 3, new QTableWidgetItem(
+                                       modeCombo->currentIndex() == 1 ? QString::number(periodSpin->value()) : "-"));
+        algoTable->setItem(row, 4, new QTableWidgetItem(battCombo->currentText()));
+
+        algoTable->item(row, 0)->setData(Qt::UserRole, algoCombo->currentData());
+        algoTable->item(row, 1)->setData(Qt::UserRole, platformCombo->currentData());
+        algoTable->item(row, 2)->setData(Qt::UserRole, modeCombo->currentData());
+        algoTable->item(row, 3)->setData(Qt::UserRole, periodSpin->value());
+        algoTable->item(row, 4)->setData(Qt::UserRole, battCombo->currentData());
+
+        for (int c = 0; c < 5; c++)
+            algoTable->item(row, c)->setTextAlignment(Qt::AlignCenter);
+    });
+
+    // ── Remove logika ─────────────────────────────────────────────────────────
+    connect(removeBtn, &QPushButton::clicked, [=]() {
+        QList<int> rows;
+        for (auto *item : algoTable->selectedItems())
+            if (!rows.contains(item->row()))
+                rows.append(item->row());
+        std::sort(rows.rbegin(), rows.rend());
+        for (int r : rows)
+            algoTable->removeRow(r);
+    });
+
+    // ── Složi: levo kontrole, desno tabela ───────────────────────────────────
+    algoConfigLayout->addWidget(controlsWidget);          // ← levo, fiksno
+    algoConfigLayout->addLayout(tableLayout, 1);          // ← desno, razvuci
+    algoConfigGroup->setLayout(algoConfigLayout);
 
     // ── Platform combo ────────────────────────────────────────────────────────
     QComboBox *platformComboBox = new QComboBox();
@@ -727,15 +709,20 @@ void SimulatorWnd::onConfigClicked()
     socGroup->setLayout(socLayout);
 
     // ── Main layout ───────────────────────────────────────────────────────────
-    groupsLayout->addWidget(graphicsGroup,          1);
-    groupsLayout->addWidget(inputFilesGroup,        2);
-    groupsLayout->addWidget(algoGroup,              1);
-    groupsLayout->addWidget(choosePlatformGroupBox, 1);
-    groupsLayout->addWidget(analysisGroupBox,       1);
-    groupsLayout->addWidget(socGroup,               1);
+    // ── Gornji red: Graphics + Files + Analysis + SoC ─────────────────────────
+    QHBoxLayout *topLayout = new QHBoxLayout();
+    topLayout->addWidget(graphicsGroup,    1);
+    topLayout->addWidget(inputFilesGroup,  3);
+    topLayout->addWidget(analysisGroupBox, 1);
+    topLayout->addWidget(socGroup,         1);
 
-    mainLayout->addLayout(groupsLayout);
-    mainLayout->addStretch();
+    // ── Donji red: Algo Configuration - pun width ─────────────────────────────
+    // algoConfigGroup već ima scroll tabelu i stretch
+
+    // ── Main layout ───────────────────────────────────────────────────────────
+    mainLayout->addLayout(topLayout); // Upper layout on main layout
+    mainLayout->addWidget(algoConfigGroup, 1); // lower layout
+    mainLayout->addStretch(0);
 
     QDialogButtonBox *buttonsOkCancel =
         new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -745,10 +732,10 @@ void SimulatorWnd::onConfigClicked()
     buttonLayout->addStretch();
     buttonLayout->addWidget(buttonsOkCancel);
     mainLayout->addLayout(buttonLayout);
-
     /* Execute *****************************************************************/
     if (dialog->exec() != QDialog::Accepted) return;
 
+    // ── Validate SoC settings ─────────────────────────────────────────────────
     double newInitSoC = initSocSpinBox->value() / 100.0;
     double newEndSoC  = endSocSpinBox->value()  / 100.0;
 
@@ -761,30 +748,68 @@ void SimulatorWnd::onConfigClicked()
     initialSoC = newInitSoC;
     endSoC     = newEndSoC;
 
-    // Collect selected algos
+    // ── Read algo configuration from table ────────────────────────────────────
+    // Each row in algoTable represents one algo to simulate
     QList<algoTimeTableDuration_e> selectedAlgos;
-    if (k0->isChecked())       selectedAlgos << K0;
-    if (k2->isChecked())       selectedAlgos << K2;
-    if (lp->isChecked())       selectedAlgos << LP;
-    if (adaptive->isChecked()) selectedAlgos << ADAPTIVE_LP_K2;
+    QList<platform_current_mah_e>  selectedPlatforms;
+    QList<algoConfig_t>            selectedConfigs;
+
+    for (int r = 0; r < algoTable->rowCount(); r++) {
+        // Column 0: Algo type (K0, K2, LP, Adaptive)
+        selectedAlgos.append(
+            static_cast<algoTimeTableDuration_e>(
+                algoTable->item(r, 0)->data(Qt::UserRole).toInt()));
+
+        // Column 1: Platform (ESP32, NXP, STM32, NRF)
+        selectedPlatforms.append(
+            static_cast<platform_current_mah_e>(
+                algoTable->item(r, 1)->data(Qt::UserRole).toInt()));
+
+        // Column 2-3: Period mode (From File or Fixed) + period value
+        algoConfig_t cfg;
+        cfg.periodMode  = static_cast<algoPeriodMode_e>(
+            algoTable->item(r, 2)->data(Qt::UserRole).toInt());
+        cfg.fixedPeriod = algoTable->item(r, 3)->data(Qt::UserRole).toInt();
+        selectedConfigs.append(cfg);
+    }
 
     if (selectedAlgos.isEmpty()) {
-        QMessageBox::warning(this, "No Algo", "Select at least one algorithm.");
+        QMessageBox::warning(this, "No Algo", "Add at least one algorithm.");
         return;
     }
 
-    isOfflineMode    = offlineAnalysys->isChecked();
-    selectedPlatform = platformComboBox->currentText();
-    platform_current_mah_e platform =
-        platformMap.value(selectedPlatform, PLATFORM_CURRENT_ESP);
+    savedAlgoTableRows.clear();
+    for (int r = 0; r < algoTable->rowCount(); r++) {
+        algoTableRow_t row;
+        row.algoText     = algoTable->item(r, 0)->text();
+        row.platformText = algoTable->item(r, 1)->text();
+        row.modeText     = algoTable->item(r, 2)->text();
+        row.periodText   = algoTable->item(r, 3)->text();
+        row.batteryText  = algoTable->item(r, 4)->text();
+        row.algoData     = algoTable->item(r, 0)->data(Qt::UserRole);
+        row.platformData = algoTable->item(r, 1)->data(Qt::UserRole);
+        row.modeData     = algoTable->item(r, 2)->data(Qt::UserRole);
+        row.periodValue  = algoTable->item(r, 3)->data(Qt::UserRole).toInt();
+        row.batteryData  = algoTable->item(r, 4)->data(Qt::UserRole);
+        savedAlgoTableRows.append(row);
+    }
 
+    // ── Clear previous algo tabs before creating new ones ─────────────────────
+    clearAlgoTabs();
+
+    // ── Read general settings ─────────────────────────────────────────────────
+    isOfflineMode    = offlineAnalysys->isChecked();
+    selectedPlatform = platformCombo->currentText();  // used for display only
+
+    // ── Read file paths ───────────────────────────────────────────────────────
     currPath        = currentPath->text();
     polynomsPath    = polyPath->text();
     ocvSOCPath      = ocvSocPath->text();
     parametersPath  = paramsPath->text();
     this->noisePath = noisePath->text();
+    this->flagPath  = flagsPath->text();
 
-    // Dock visibility
+    // ── Apply dock visibility ─────────────────────────────────────────────────
     currentBatteryDock->setVisible(showCurrentBattery->isChecked());
     currentSystemDock->setVisible(showCurrentSystem->isChecked());
     currentPlatformDock->setVisible(showCurrentPlatform->isChecked());
@@ -792,21 +817,21 @@ void SimulatorWnd::onConfigClicked()
     socDock->setVisible(showSoc->isChecked());
     redistributeDocks();
 
-    // Clear plots
+    // ── Clear all plots ───────────────────────────────────────────────────────
     currentBatteryPlot->clear();
     currentSystemPlot->clear();
     currentPlatformPlot->clear();
     voltagePlot->clear();
     socPlot->clear();
 
+    // ── Online mode ───────────────────────────────────────────────────────────
     if (!isOfflineMode) {
-        // ── Online mode: single algo only ─────────────────────────────────────
-        clearAlgoTabs();
 
-        algoTimeTableDuration_e algo = selectedAlgos.first();
+        // Online mode uses only the first algo in the table
+        algoTimeTableDuration_e algo     = selectedAlgos.first();
+        platform_current_mah_e  platform = selectedPlatforms.first();
 
-        // Reconfigure flags path
-        flagsPath->setText(algoFlagsPath(algo));
+        // Auto-select flags file based on algo type
         this->flagPath = algoFlagsPath(algo);
 
         simulatorContainer->setAlgoSelected(algo);
@@ -825,30 +850,40 @@ void SimulatorWnd::onConfigClicked()
         speedUpBtn->setText("1x");
         timerPeriodMs = 10;
 
+        // ── Offline mode ──────────────────────────────────────────────────────────
     } else {
-        /* Offline mode: one container per algo ***************************************/
-        clearAlgoTabs();
 
-        for (algoTimeTableDuration_e algo : selectedAlgos) {
+        // Create one SimulatorContainer per algo row in the table
+        for (int r = 0; r < selectedAlgos.size(); r++) {
+            algoTimeTableDuration_e algo     = selectedAlgos[r];
+            platform_current_mah_e  platform = selectedPlatforms[r];
+            // algoConfig_t         cfg      = selectedConfigs[r];  // TODO: pass to container
+
             algoTab_t tab;
-            tab.algo     = algo;
-            tab.algoName = algoTabName(algo);
+            tab.algo         = algo;
+            tab.algoName     = algoTabName(algo);
+            tab.platformName = algoTable->item(r, 1)->text();  // ← iz tabele, per-row!
+            tab.platformEnum = platform;
 
-            BatteryModel *tabBatteryModel = new BatteryModel(this);
-            TimeTable    *tabTimeTable    = new TimeTable(algo, this);
+            // Each tab gets its own BatteryModel and TimeTable to avoid race conditions
+            BatteryModel    *tabBatteryModel    = new BatteryModel(this);
+            TimeTable       *tabTimeTable       = new TimeTable(algo, this);
+            PlatformCurrent *tabPlatformCurrent = new PlatformCurrent(platform, this);
 
-            tab.batteryModel = tabBatteryModel;
-            tab.timeTable    = tabTimeTable;
+            tab.batteryModel    = tabBatteryModel;
+            tab.timeTable       = tabTimeTable;
+            tab.platformCurrent = tabPlatformCurrent;
 
             tab.container = new SimulatorContainer(
-                tabBatteryModel, platformCurrent, tabTimeTable, this);
+                tabBatteryModel, tabPlatformCurrent, tabTimeTable, this);
 
+            // Set all file paths for this container
             tab.container->setCurrentPath(currPath);
             tab.container->setOcvPolyPath(polynomsPath);
             tab.container->setOcvSocPath(ocvSOCPath);
             tab.container->setParamsPath(parametersPath);
             tab.container->setNoisePath(this->noisePath);
-            tab.container->setFlagsPath(algoFlagsPath(algo));
+            tab.container->setFlagsPath(algoFlagsPath(algo));  // flags per algo type
             tab.container->setOutputPath(algoOutputPath(algo));
             tab.container->setAlgoSelected(algo);
             tab.container->setOfflineMode(true);
@@ -858,29 +893,19 @@ void SimulatorWnd::onConfigClicked()
                     [=](const QString &msg){ qDebug() << "Load error:" << msg; });
 
             algoTabs.append(tab);
-            tabBar->addTab(tab.algoName);
         }
 
-        // Always exists output Tab
-        tabBar->addTab("Output Simulation");
-
-        // Load files for all
+        // Load files for all containers
         for (auto &tab : algoTabs) {
             if (!tab.container->loadFiles()) return;
             tab.container->reset(initialSoC);
         }
 
-        // Set tabs to be invisible
-        tabBar->setMaximumHeight(QWIDGETSIZE_MAX);
-        tabBar->setMinimumHeight(0);
-        tabBar->setFixedHeight(0);
-        tabBar->setVisible(false);
-
-        // Speed button set false
         speedUpBtn->setEnabled(false);
         speedUpBtn->setText("Offline");
     }
 
+    // ── Final UI state ────────────────────────────────────────────────────────
     playBtn->setEnabled(true);
     setLed(ledConfigLabel, "green");
     statusConfigLabel->setText("Configured");
@@ -892,71 +917,80 @@ void SimulatorWnd::onConfigClicked()
  ******************************************************************************/
 void SimulatorWnd::onSimuSettingsClicked()
 {
+    // Check if there is a algo
     if (algoTabs.isEmpty()) {
+        // Error for not chosing simulation params
         QMessageBox::information(this, "No Simulation", "Run a simulation first.");
         return;
     }
 
+    // Creates qDialog for new window
     QDialog *dialog = new QDialog(this);
     dialog->setWindowTitle("Simulation Display Settings");
     dialog->resize(400, 350);
 
+    // Main layout
     QVBoxLayout *mainLayout = new QVBoxLayout(dialog);
 
-    // === GROUP ===
+    // Visible group
     QGroupBox *visibilityGroup = new QGroupBox("Show Algorithms");
     QVBoxLayout *visLayout = new QVBoxLayout();
 
+    // List of checkboxes
     QList<QCheckBox*> compareCheckboxes;
 
-    // === CHECKBOX LIST ===
+    // CheckBox list
     for (int i = 0; i < algoTabs.size(); i++) {
-        QCheckBox *cb = new QCheckBox(algoTabs[i].algoName);
+        // New checkbox
+        QCheckBox *cb = new QCheckBox(algoTabs[i].algoName + " " + "[" + algoTabs[i].platformName + "]");
 
-        // restore previous state
-        bool checked = (i < visibleAlgosInCompare.size()) ?
-                           visibleAlgosInCompare[i] : true;
+        // This is restoring previous state
+        bool checked = (i < visibleAlgosInCompare.size()) ? visibleAlgosInCompare[i] : true;
 
+        // Active cb set checked if it was previously setted
         cb->setChecked(checked);
 
+        // Add to VBox
         visLayout->addWidget(cb);
+
+        // Save current state of checkbox for next time when they open window
         compareCheckboxes.append(cb);
     }
 
+    // Add to visibility group
     visibilityGroup->setLayout(visLayout);
+
+    // Add visibility group to the main layout
     mainLayout->addWidget(visibilityGroup);
+
+    // Strech it
     mainLayout->addStretch();
 
-    // === BUTTONS ===
-    QDialogButtonBox *buttons =
-        new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    // Buttons for accept or reject chosen articles
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
     connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
 
+    // Add them in horizontal layout
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
     btnLayout->addWidget(buttons);
+
+    // Add them in main layout
     mainLayout->addLayout(btnLayout);
 
-    // === EXEC ===
+    // Depends on clicked button
     if (dialog->exec() != QDialog::Accepted)
         return;
 
-    // === SAVE STATE ===
+    // Save this state
     visibleAlgosInCompare.clear();
     for (int i = 0; i < compareCheckboxes.size(); i++)
         visibleAlgosInCompare.append(compareCheckboxes[i]->isChecked());
 
-    // === ONLY ONE TAB ===
-    int outputIdx = algoTabs.size();
-
-    tabBar->setTabVisible(outputIdx, true);
-    tabBar->setTabEnabled(outputIdx, true);
-    tabBar->setCurrentIndex(outputIdx);
-
-    // === REPLOT ===
-    replotCompareTab();
+    // Replot active tab with configured algo that we checked
+    replotActiveTab();
 }
 
 
@@ -973,7 +1007,7 @@ void SimulatorWnd::onLogInfoClicked()
     // Create vertical layout for table
     QVBoxLayout *layout = new QVBoxLayout(dialogWindow);
 
-
+    // For offline analysys
     if(isOfflineMode && !algoTabs.isEmpty()){
 
         // Create QTab
@@ -983,18 +1017,19 @@ void SimulatorWnd::onLogInfoClicked()
         for (int i = 0; i < algoTabs.size(); i++) {
             const algoTab_t &tab = algoTabs[i];
 
+            // Fulfill the table
             QTableWidget *table = createResultsTable(
                 tab.avgBatteryCurr,
                 tab.avgSystemCurr,
                 tab.container->getLastValuesOfSimulationStep(),
                 tab.container->getTimeS(),
                 tab.container->getNumberOfSamples(),
-                tab.algoName
-                );
+                tab.algoName,
+                tab.platformName);
 
-            tabWidget->addTab(table, tab.algoName);
+            // That table push into current tab
+            tabWidget->addTab(table, tab.algoName + " " +"[" + tab.platformName + "]");
         }
-        tabWidget->setCurrentIndex(tabBar->currentIndex());
 
         layout->addWidget(tabWidget);
     }
@@ -1006,7 +1041,8 @@ void SimulatorWnd::onLogInfoClicked()
                 simulatorContainer->getLastValuesOfSimulationStep(),
                 simulatorContainer->getTimeS(),
                 simulatorContainer->getNumberOfSamples(),
-                ""
+                "",
+                selectedPlatform
                 );
             layout->addWidget(table);
     }
@@ -1023,24 +1059,32 @@ void SimulatorWnd::onLogInfoClicked()
 /*******************************************************************************
  * onPlayClicked
  ******************************************************************************/
-
-
 void SimulatorWnd::onPlayClicked()
 {
+    // Run offline simulation
     if (isOfflineMode) {
         qDebug() << "Run Offline Simulation";
         startOfflineSimulation();
-    } else {
+    }
+    else {
         qDebug() << "Run Online Simulation";
         currentSimState = SIMULATION_PLAYING;
+
+        // Enable buttons
         playBtn->setEnabled(false);
         stopBtn->setEnabled(true);
         pauseBtn->setEnabled(true);
         speedUpBtn->setEnabled(true);
         configBtn->setEnabled(false);
+
+        // Update status bar
         setLed(ledPlaySimulationLabel, "green");
         statusPlaySimulationLabel->setText("Running");
+
+        // Start timer for online simulation
         timer->start(timerPeriodMs);
+
+        // Emit signal that we clicked play btn
         emit sigPlay();
     }
 }
@@ -1050,48 +1094,59 @@ void SimulatorWnd::onPlayClicked()
  ******************************************************************************/
 void SimulatorWnd::onStopClicked()
 {
+    // Stop simulation
     currentSimState = SIMULATION_STOPPED;
     qDebug() << "Stop Simulation";
 
+    // Stop the timer
     timer->stop();
 
+    // Reset all tabs containers to the init values
     if (isOfflineMode) {
         for (auto &tab : algoTabs)
             tab.container->reset(initialSoC);
-    } else {
+    }
+    else {
         simulatorContainer->reset(initialSoC);
     }
 
+    // Clear all graphs
     currentBatteryPlot->clearAllGraphs();
     currentSystemPlot->clearAllGraphs();
     currentPlatformPlot->clearAllGraphs();
     voltagePlot->clearAllGraphs();
     socPlot->clearAllGraphs();
+    socErrorDiffPlot->clearAllGraphs();
 
+    // Disable legends for all graphs
+    currentPlatformPlot->enableLegend(false);
+    socPlot->enableLegend(false);
+    voltagePlot->enableLegend(false);
+    currentBatteryPlot->enableLegend(false);
+    socErrorDiffPlot->enableLegend(false);
+
+    // Restore for online mode btn and timer period
     if (!isOfflineMode) {
         speedUpBtn->setText("1x");
         timerPeriodMs = 10;
     }
 
-    playBtn->setEnabled(true);
+    // Buttons enable
+    playBtn->setEnabled(true);   // Enable play to redo simu
     stopBtn->setEnabled(false);
     pauseBtn->setEnabled(false);
     speedUpBtn->setEnabled(false);
-    configBtn->setEnabled(true);
+    configBtn->setEnabled(true); // Enable config
     logInfoBtn->setEnabled(false);
     simulationSettingsBtn->setEnabled(false);
 
-    // Hide tab Bar
-    tabBar->setMaximumHeight(QWIDGETSIZE_MAX);
-    tabBar->setMinimumHeight(0);
-    tabBar->setFixedHeight(0);
-    tabBar->setVisible(false);
-
+    // Status bar update
     setLed(ledPlaySimulationLabel, "red");
     statusPlaySimulationLabel->setText("Stopped");
     progressBar->setValue(0);
     currentSample = 0;
 
+    // Emit stop signal
     emit sigStop();
 }
 
@@ -1100,6 +1155,7 @@ void SimulatorWnd::onStopClicked()
  ******************************************************************************/
 void SimulatorWnd::onPauseClicked()
 {
+    // If timer is active stop it
     if (timer->isActive()) {
         currentSimState = SIMULATION_PAUSED;
         timer->stop();
@@ -1121,11 +1177,17 @@ void SimulatorWnd::onPauseClicked()
  ******************************************************************************/
 void SimulatorWnd::onSpeedUpClicked()
 {
+    // Offline skip
     if (isOfflineMode) return;
+
+
+    // Online analysis change period of timer, speed it up
     if      (timerPeriodMs == 10) { speedUpBtn->setText("2x"); timerPeriodMs = 5;  }
     else if (timerPeriodMs == 5)  { speedUpBtn->setText("5x"); timerPeriodMs = 2;  }
     else                          { speedUpBtn->setText("1x"); timerPeriodMs = 10; }
     if (timer->isActive()) { timer->stop(); timer->start(timerPeriodMs); }
+
+    // Emit signal
     emit sigSpeedUp();
 }
 
@@ -1134,17 +1196,25 @@ void SimulatorWnd::onSpeedUpClicked()
  ******************************************************************************/
 void SimulatorWnd::startOfflineSimulation()
 {
+    // Disable buttons
     playBtn->setEnabled(false);
     configBtn->setEnabled(false);
+
+    // Update status bar
     setLed(ledPlaySimulationLabel, "green");
     statusPlaySimulationLabel->setText("Offline Processing");
 
+    // Take tab count number
     int tabCount = algoTabs.size();
     QSharedPointer<QAtomicInt> finishedCount(new QAtomicInt(0));
 
+    // Go through every tab and run the simulation for every algo type
     for (int i = 0; i < tabCount; i++) {
 
+        // Reset current container of each algo
         algoTabs[i].container->reset(initialSoC);
+
+        // Set all values to the init state
         algoTabs[i].avgBatteryCurr = 0.0;
         algoTabs[i].avgSystemCurr  = 0.0;
         algoTabs[i].simulatorSample.time.clear();
@@ -1156,18 +1226,32 @@ void SimulatorWnd::startOfflineSimulation()
         algoTabs[i].simulatorSample.soc.system.clear();
         algoTabs[i].simulatorSample.soc.algoSoc.clear();
 
+        // Run the algo on each thread
         QtConcurrent::run([this, i, tabCount, finishedCount]()
           {
+              // Take the current pointer for each algo container
               SimulatorContainer *container = algoTabs[i].container;
+
+              // Normalize soc value
               double endSocPct = endSoC * 100.0;
 
+              // Vectors for saving all samples
               QVector<double> vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys, vAlgoSoc;
-              double avgBat = 0.0, avgSys = 0.0;
+
+              // Initial average current values
+              double avgCurrBat = 0.0;
+              double avgCurrSys = 0.0;
+
+              // Current local sample
               int localSample = 0;
 
+              // Infinity loop for each algo
               while (!container->isFinished()) {
+
+                  // Do a step
                   container->step();
 
+                  // Take every sample for each algo
                   double soc = container->getSoC();
                   vTime.push_back(container->getTimeS());
                   vBat.push_back(container->getVBat());
@@ -1178,12 +1262,17 @@ void SimulatorWnd::startOfflineSimulation()
                   vSocIsys.push_back(container->getSoCIsys());
                   vAlgoSoc.push_back(container->getAlgoSoc() * 100.0);
 
-                  avgBat += container->getIBat();
-                  avgSys += container->getISys();
+                  // Accumulate value for average current
+                  avgCurrBat += container->getIBat();
+                  avgCurrSys += container->getISys();
+
+                  // Increment local sample
                   localSample++;
 
+                  // If condition from config are reached break simulation for that algo
                   if (soc <= endSocPct) break;
 
+                  // Update progress bar
                   if (i == 0 && localSample % 1000 == 0) {
                       int pct = (localSample * 100) / container->getNumberOfSamples();
                       QMetaObject::invokeMethod(this, [=]() {
@@ -1193,16 +1282,20 @@ void SimulatorWnd::startOfflineSimulation()
               }
 
               // Calculate average Currents for info window
-              if (localSample > 0) { avgBat /= localSample; avgSys /= localSample; }
+              if (localSample > 0) {
+                  avgCurrBat /= localSample;
+                  avgCurrSys /= localSample;
+              }
 
               // Back to main thread: store data and replot if active tab
               QMetaObject::invokeMethod(this,
-                                        [this, i, avgBat, avgSys,
+                                        [this, i, avgCurrBat, avgCurrSys,
                                          vTime, vBat, vIbat, vISys, vIPlatform, vSoc, vSocIsys, vAlgoSoc,
                                          tabCount, finishedCount]()
                 {
-                    algoTabs[i].avgBatteryCurr                   = avgBat;
-                    algoTabs[i].avgSystemCurr                    = avgSys;
+                    // Fill the structs with each algo value
+                    algoTabs[i].avgBatteryCurr                   = avgCurrBat;
+                    algoTabs[i].avgSystemCurr                    = avgCurrSys;
                     algoTabs[i].simulatorSample.time             = vTime;
                     algoTabs[i].simulatorSample.voltage.battery  = vBat;
                     algoTabs[i].simulatorSample.current.battery  = vIbat;
@@ -1212,20 +1305,23 @@ void SimulatorWnd::startOfflineSimulation()
                     algoTabs[i].simulatorSample.soc.system       = vSocIsys;
                     algoTabs[i].simulatorSample.soc.algoSoc      = vAlgoSoc;
 
-                    // If this tab is currently visible, replot immediately
-                    if (tabBar->currentIndex() == i)
-                        replotActiveTab();
-
+                    // Print in log tab that algo is finished
                     qDebug() << "Tab" << algoTabs[i].algoName << "finished";
 
                     int done = finishedCount->fetchAndAddOrdered(1) + 1;
+
+                    // Check if every algo finished the simulation
                     if (done == tabCount) {
                         visibleAlgosInCompare.clear();
                         for (int i = 0; i < algoTabs.size(); i++)
                             visibleAlgosInCompare.append(true);
+
+                        // Update status bar
                         progressBar->setValue(100);
                         setLed(ledPlaySimulationLabel, "green");
                         statusPlaySimulationLabel->setText("Offline Done");
+
+                        // Buttons enable
                         playBtn->setEnabled(false);
                         stopBtn->setEnabled(true);
                         configBtn->setEnabled(true);
@@ -1233,6 +1329,8 @@ void SimulatorWnd::startOfflineSimulation()
                         simulationSettingsBtn->setEnabled(true);
                         pauseBtn->setEnabled(false);
                         speedUpBtn->setEnabled(false);
+
+                        // Print log console
                         qDebug() << "All simulations finished";
                     }
                 });
@@ -1296,4 +1394,190 @@ void SimulatorWnd::redistributeDocks()
     QList<int> sizes;
     for (int i = 0; i < visible.size(); i++) sizes << each;
     resizeDocks(visible, sizes, Qt::Vertical);
+}
+
+/*******************************************************************************
+ * Helpers for Simulation Window file
+ ******************************************************************************/
+
+void logHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
+{
+    // If it's called and empty return
+    if (!g_logConsole) return;
+
+    // Add prefix for each message
+    QString prefix;
+
+    // Select type of message
+    switch (type) {
+    case QtDebugMsg:    prefix = "[DEBUG] "; break;
+    case QtWarningMsg:  prefix = "[WARN]  "; break;
+    case QtCriticalMsg: prefix = "[ERROR] "; break;
+    default: break;
+    }
+
+    // Print in console
+    QMetaObject::invokeMethod(g_logConsole, "append",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, prefix + msg));
+}
+
+
+static QString formatSeconds(float totalSeconds)
+{
+    int h = (int)(totalSeconds / 3600);
+    int m = (int)((totalSeconds - h * 3600) / 60);
+    int s = (int)(totalSeconds - h * 3600 - m * 60);
+    return QString("%1h %2m %3s")
+        .arg(h, 2, 10, QChar('0'))
+        .arg(m, 2, 10, QChar('0'))
+        .arg(s, 2, 10, QChar('0'));
+}
+
+QTableWidget* SimulatorWnd::createResultsTable(
+    double avgBat, double avgSys,
+    lastSimulationStepsValues finalResults,
+    float timeElapsed, int totalSamples,
+    const QString &algoName,
+    const QString &platformName)
+{
+    // Creating table dynamicly
+    QTableWidget *table = new QTableWidget();
+    table->setColumnCount(2);
+    table->horizontalHeader()->setVisible(false);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table->verticalHeader()->setVisible(false);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionMode(QAbstractItemView::NoSelection);
+    table->setFocusPolicy(Qt::NoFocus);
+    table->setAlternatingRowColors(true);
+    table->setShowGrid(false);
+
+    // Adding separators for each main thing in the table
+    auto addSeparator = [&](const QString &title) {
+        int row = table->rowCount();
+        table->insertRow(row);
+        QTableWidgetItem *item = new QTableWidgetItem(" " + title);
+        QFont f = item->font(); f.setBold(true); item->setFont(f);
+        item->setBackground(QColor("#efefef"));
+        table->setItem(row, 0, item);
+        QTableWidgetItem *empty = new QTableWidgetItem("");
+        empty->setBackground(QColor("#efefef"));
+        table->setItem(row, 1, empty);
+        table->setRowHeight(row, 20);
+    };
+
+    // Add a row in a table
+    auto addRow = [&](const QString &label, const QString &value, bool bold = false) {
+        int row = table->rowCount();
+        table->insertRow(row);
+        table->setItem(row, 0, new QTableWidgetItem(label));
+        QTableWidgetItem *valItem = new QTableWidgetItem(value);
+        valItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        if (bold) {
+            QFont f = valItem->font(); f.setBold(true); valItem->setFont(f);
+        }
+        table->setItem(row, 1, valItem);
+        table->setRowHeight(row, 24);
+    };
+
+    // With platform name extracts real value of platform current
+    platform_current_mah_e pc = PLATFORM_CURRENT_ESP;
+    if      (platformName == "NXP")   pc = PLATFORM_CURRENT_NXP;
+    else if (platformName == "STM32") pc = PLATFORM_CURRENT_STM;
+    else if (platformName == "NRF")   pc = PLATFORM_CURRENT_NRF;
+    float platformCurrent = static_cast<float>(pc);
+
+    /* This is how much time did pass due whole simulation depends on sampling period
+     and number of samples every simulation */
+    QTime time = QTime::fromMSecsSinceStartOfDay(static_cast<int>(timeElapsed * 1000));
+    QString formattedTime = time.toString("hh'h' mm'm' ss's'");
+
+    /* Calculates system soc based on config settings of initial soc and from
+     * end of simulation system soc */
+    double deltaSOC    = (initialSoC * 100.0) - finalResults.lastSoC;
+    double capacityMah = 0.0;
+
+    // Calculates capacity of battery based on delta soc
+    if (deltaSOC > 0.0)
+        capacityMah = (finalResults.lastElectricChargeBattery / deltaSOC) * 100.0;
+
+    double avgSysCurrMa = avgSys * 1000.0; // [A] -> [mA]
+    double avgBatCurrMa = avgBat * 1000.0; // [A] -> [mA]
+
+    // Calculates operational times based on average current and capacity of batteries
+    float maxOpTime = (avgSysCurrMa > 0.0) ? (float)((capacityMah / avgSysCurrMa) * 3600.0) : 0.0f;
+    float sysOpTime = (avgBatCurrMa > 0.0) ? (float)((capacityMah / avgBatCurrMa) * 3600.0) : 0.0f;
+    float algoCost  = maxOpTime - sysOpTime;
+
+    // Create table with variables that we calculate
+    addSeparator("General");
+    addRow("Platform",      platformName);
+    if (!algoName.isEmpty()) addRow("Algorithm", algoName);
+    addRow("Total Samples", QString::number(totalSamples));
+
+    // Soc things
+    addSeparator("State of Charge");
+    addRow("Initial SoC Battery", QString("%1 %").arg(initialSoC * 100.0, 0, 'f', 1));
+    addRow("Final SoC Battery",   QString("%1 %").arg(finalResults.lastSoC, 0, 'f', 2));
+    addRow("Initial SoC System",  QString("%1 %").arg(initialSoC * 100.0, 0, 'f', 1));
+    addRow("Final SoC System",    QString("%1 %").arg(finalResults.lastSoCIsys, 0, 'f', 2));
+
+    // Voltage things
+    addSeparator("Voltage");
+    addRow("Final Terminal Voltage", QString("%1 V").arg(finalResults.lastVBat, 0, 'f', 4));
+
+    // Current things
+    addSeparator("Current");
+    addRow("Avg Battery Current", QString("%1 mA").arg(avgBatCurrMa, 0, 'f', 4));
+    addRow("Avg System Current",  QString("%1 mA").arg(avgSysCurrMa, 0, 'f', 4));
+    addRow("Platform Current",    QString("%1 mA").arg(platformCurrent,  0, 'f', 4));
+
+    // Electric charges things
+    addSeparator("Electric Charge");
+    addRow("Battery Capacity", QString("%1 mAh").arg(capacityMah, 0, 'f', 2));
+    addRow("Charge Battery",   QString("%1 mAh").arg(finalResults.lastElectricChargeBattery, 0, 'f', 4));
+    addRow("Charge System",    QString("%1 mAh").arg(finalResults.lastElectricChargeSystem,  0, 'f', 4));
+    addRow("Charge Algo",      QString("%1 mAh").arg(finalResults.lastElectricChargeAlgo,    0, 'f', 4));
+
+    // Time simulations things
+    addSeparator("Time");
+    addRow("Simulation Time",    formattedTime);
+    addRow("Maximal Oper. Time", formatSeconds(maxOpTime));
+    addRow("System Oper. Time",  formatSeconds(sysOpTime));
+    addRow("Algo Time Cost",     formatSeconds(algoCost), true);
+
+    return table;
+}
+
+static QString algoTabName(algoTimeTableDuration_e algo)
+{
+    // Based on time table gives exact name of algo
+    switch (algo) {
+    case K0:             return "K0";
+    case K2:             return "K2";
+    case LP:             return "LP";
+    case ADAPTIVE_LP_K2: return "Adaptive";
+    default:             return "Unknown";
+    }
+}
+
+
+static QString algoFlagsPath(algoTimeTableDuration_e algo)
+{
+    // Gives hardcoded file paths for each algo
+    switch (algo) {
+    case K0:  return "/home/filip/Projects/Master/Params/flags_k0.csv";
+    case K2:  return "/home/filip/Projects/Master/Params/flags_k2.csv";
+    case LP:  return "/home/filip/Projects/Master/Params/flags_lp.csv";
+    default:  return "/home/filip/Projects/Master/Params/flags_adaptive.csv";
+    }
+}
+
+static QString algoOutputPath(algoTimeTableDuration_e algo)
+{
+    // Hardcoded output path based on time table of algo
+    return QString("/home/filip/Projects/Master/Output/output_%1.csv")
+        .arg(algoTabName(algo));
 }

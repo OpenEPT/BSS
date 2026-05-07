@@ -264,7 +264,7 @@ void SimulatorContainer::reset(double SocReference)
     socReference->socReferenceSet(SocReference);
     socReference->setSocIsys(SocReference);
     batteryModel->reset(SocReference);
-    algo->algoReset();
+    algo->algoReset(SocReference);
 }
 
 /*******************************************************************************
