@@ -293,76 +293,64 @@ void SimulatorWnd::replotActiveTab()
 
     // SocIsys GRAPH(0)
     socPlot->setGraphLineStyle(0, Qt::DotLine, QColor(0, 0, 0), "SoC Isys");
-    socPlot->setGraphLineWidth(0, 2);
+    socPlot->setGraphLineWidth(0, PLOT_LINE_WIDTH - 1);
     socPlot->setGraphData(0, algoTabs[0].simulatorSample.soc.system,
                           algoTabs[0].simulatorSample.time);
 
     // Plot System current, it's the same for all algo
     currentSystemPlot->setGraphData(0, algoTabs[0].simulatorSample.current.system,
-                          algoTabs[0].simulatorSample.time);
+                                    algoTabs[0].simulatorSample.time);
 
     int graphIdx = 1;
-    int plotIdx = 0;
+    int plotIdx  = 0;
 
-    // Plot all other graphs
     for (int i = 0; i < algoTabs.size(); i++) {
 
-        // Check if algo is selected in simulation settings
         bool show = (i < visibleAlgosInCompare.size()) ? visibleAlgosInCompare[i] : true;
-
-        // If it's not selected skip algo, doesn't need to be plotted
         if (!show) continue;
 
-
-        // take algo tab
         const algoTab_t &tab = algoTabs[i];
         QColor colorAlgo   = colors[i % colors.size()];
         QColor colorSoCBat = colorAlgo.lighter(140);
 
-        // ── SoC ───────────────────────────────────────────────────────────────────────────────────
+        // ── SoC ──────────────────────────────────────────────────────────────────────────────────
 
-        // First soc plot is referent soc bat
-        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine, 2);
+        socPlot->addLineGraphWithStyle(colorSoCBat, tab.algoName + " SoCBat", Qt::DashLine, PLOT_LINE_WIDTH - 1);
         socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.battery, tab.simulatorSample.time);
 
-        // Other plot is real algo soc
         socPlot->addLineGraph(colorAlgo, tab.algoName + " AlgoSoC");
-        socPlot->setGraphLineWidth(graphIdx, 2);
+        socPlot->setGraphLineWidth(graphIdx, PLOT_LINE_WIDTH - 1);
         socPlot->setGraphData(graphIdx++, tab.simulatorSample.soc.algoSoc, tab.simulatorSample.time);
 
         // ── Voltage, Battery & Platform Current ───────────────────────────────────────────────────
+
         if (plotIdx == 0) {
-            // Voltage plot
             voltagePlot->setGraphName(0, tab.algoName);
-            voltagePlot->setGraphLineWidth(0, 2);
+            voltagePlot->setGraphLineWidth(0, PLOT_LINE_WIDTH - 1);
             voltagePlot->setData(tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
 
-            // Current Battery plot
             currentBatteryPlot->setGraphName(0, tab.algoName);
-            currentBatteryPlot->setGraphLineWidth(0, 2);
+            currentBatteryPlot->setGraphLineWidth(0, PLOT_LINE_WIDTH - 1);
             currentBatteryPlot->setData(tab.simulatorSample.current.battery, tab.simulatorSample.time);
 
-            // Current platform plot
             currentPlatformPlot->setGraphName(0, tab.algoName);
-            currentPlatformPlot->setGraphLineWidth(0, 2);
+            currentPlatformPlot->setGraphLineWidth(0, PLOT_LINE_WIDTH - 1);
             currentPlatformPlot->setData(tab.simulatorSample.current.platform, tab.simulatorSample.time);
 
         } else {
-            // Voltage plot
             voltagePlot->addLineGraph(colorAlgo, tab.algoName);
-            voltagePlot->setGraphLineWidth(plotIdx, 2);
+            voltagePlot->setGraphLineWidth(plotIdx, PLOT_LINE_WIDTH - 1);
             voltagePlot->setGraphData(plotIdx, tab.simulatorSample.voltage.battery, tab.simulatorSample.time);
 
-            // Current Battery plot
             currentBatteryPlot->addLineGraph(colorAlgo, tab.algoName);
-            currentBatteryPlot->setGraphLineWidth(plotIdx, 2);
+            currentBatteryPlot->setGraphLineWidth(plotIdx, PLOT_LINE_WIDTH - 1);
             currentBatteryPlot->setGraphData(plotIdx, tab.simulatorSample.current.battery, tab.simulatorSample.time);
 
-            // Current platform plot
             currentPlatformPlot->addLineGraph(colorAlgo, tab.algoName);
-            currentPlatformPlot->setGraphLineWidth(plotIdx, 2);
+            currentPlatformPlot->setGraphLineWidth(plotIdx, PLOT_LINE_WIDTH - 1);
             currentPlatformPlot->setGraphData(plotIdx, tab.simulatorSample.current.platform, tab.simulatorSample.time);
         }
+
         plotIdx++;
     }
 
@@ -372,7 +360,6 @@ void SimulatorWnd::replotActiveTab()
     currentBatteryPlot->replotAll();
     currentPlatformPlot->replotAll();
 }
-
 /*******************************************************************************
  * onTimerTick - online mode
  ******************************************************************************/
@@ -640,7 +627,7 @@ void SimulatorWnd::onConfigClicked()
     inputFilesGroup->setLayout(rightFilesGroup);
 
     // Set default paths
-    currentPath->setText("/home/filip/Projects/Master/Params/current_pattern_najnoviji.csv");
+    currentPath->setText("/home/filip/Projects/Master/Params/current_lp.csv");
     polyPath->setText   ("/home/filip/Projects/Master/Params/ocv_poly_10.csv");
     ocvSocPath->setText ("/home/filip/Projects/Master/Params/ocv.csv");
     paramsPath->setText ("/home/filip/Projects/Master/Params/parameters.csv");
@@ -834,7 +821,7 @@ void SimulatorWnd::onConfigClicked()
             tab.platformName = algoTable->item(r, 1)->text();  // ← iz tabele, per-row!
             tab.platformEnum = platform;
 
-            // Each tab gets its own BatteryModel and TimeTable to avoid race conditions
+            // Each tab gets its own BatteryModel, TimeTable, Platform current to avoid race conditions
             BatteryModel    *tabBatteryModel    = new BatteryModel(this);
             TimeTable       *tabTimeTable       = new TimeTable(algo, this);
             PlatformCurrent *tabPlatformCurrent = new PlatformCurrent(platform, this);
@@ -888,12 +875,11 @@ void SimulatorWnd::onSimuSettingsClicked()
 {
     // Check if there is a algo
     if (algoTabs.isEmpty()) {
-        // Error for not chosing simulation params
         QMessageBox::information(this, "No Simulation", "Run a simulation first.");
         return;
     }
 
-    // Creates qDialog for new window
+    // Creates qDialog for settings window
     QDialog *dialog = new QDialog(this);
     dialog->setWindowTitle("Simulation Display Settings");
     dialog->resize(400, 350);
@@ -901,7 +887,7 @@ void SimulatorWnd::onSimuSettingsClicked()
     // Main layout
     QVBoxLayout *mainLayout = new QVBoxLayout(dialog);
 
-    // Algorithm  group
+    // Algorithm group
     QGroupBox *algoGroup = new QGroupBox("Show Algorithms Plots");
     QVBoxLayout *algoLayout = new QVBoxLayout();
 
@@ -914,72 +900,43 @@ void SimulatorWnd::onSimuSettingsClicked()
 
     // CheckBox list for algo
     for (int i = 0; i < algoTabs.size(); i++) {
-        // New checkbox
         QCheckBox *cb = new QCheckBox(algoTabs[i].algoName + " " + "[" + algoTabs[i].platformName + "]");
-
-        // This is restoring previous state
         bool checked = (i < visibleAlgosInCompare.size()) ? visibleAlgosInCompare[i] : true;
-
-        // Active cb set checked if it was previously setted
         cb->setChecked(checked);
-
-        // Add to VBox
         algoLayout->addWidget(cb);
-
-        // Save current state of checkbox for next time when they open window
         compareCheckboxes.append(cb);
     }
 
-    // List of checkboxes
+    // Output checkboxes
     QList<QCheckBox*> outputCheckboxes;
-
-    for(int i = 0; i < 1; i++){
+    for (int i = 0; i < 1; i++) {
         QCheckBox *checkBoxOutput = new QCheckBox("Output SoC Difference");
-
-        // Tihis is restoring previous state
         bool checkedOutput = (i < visibleOutputInSimulationSettings.size()) ? visibleOutputInSimulationSettings[i] : true;
-
         checkBoxOutput->setChecked(checkedOutput);
-
-        // Add to output layout
         outputLayout->addWidget(checkBoxOutput);
-
-        // Save current state of checkbox for next time when they open this window
         outputCheckboxes.append(checkBoxOutput);
     }
 
-    // Add to visibility group
     algoGroup->setLayout(algoLayout);
-
-    // Add to output group
     outputGroup->setLayout(outputLayout);
 
-    // Add visibility group to the main layout
     mainLayout->addWidget(algoGroup);
     mainLayout->addWidget(outputGroup);
-
-    // Strech it
     mainLayout->addStretch();
 
-    // Buttons for accept or reject chosen articles
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-
     connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
 
-    // Add them in horizontal layout
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
     btnLayout->addWidget(buttons);
-
-    // Add them in main layout
     mainLayout->addLayout(btnLayout);
 
-    // Depends on clicked button
     if (dialog->exec() != QDialog::Accepted)
         return;
 
-    // Save this state
+    // Save state
     visibleAlgosInCompare.clear();
     for (int i = 0; i < compareCheckboxes.size(); i++)
         visibleAlgosInCompare.append(compareCheckboxes[i]->isChecked());
@@ -988,7 +945,6 @@ void SimulatorWnd::onSimuSettingsClicked()
     for (int i = 0; i < outputCheckboxes.size(); i++)
         visibleOutputInSimulationSettings.append(outputCheckboxes[i]->isChecked());
 
-    // Replot active tab with configured algo that we checked
     replotActiveTab();
 
     if (!outputCheckboxes.isEmpty() && outputCheckboxes[0]->isChecked()) {
@@ -997,26 +953,38 @@ void SimulatorWnd::onSimuSettingsClicked()
 }
 
 
-void SimulatorWnd::onOutputSimulationChecked(){
-    QDialog *dialog = new QDialog(this);
-    dialog->resize(800, 800);
+void SimulatorWnd::onOutputSimulationChecked()
+{
+    // Ako već postoji, samo podigne prozor
+    if (outputDialog) {
+        outputDialog->raise();
+        outputDialog->activateWindow();
+        return;
+    }
 
-    QVBoxLayout *layout = new QVBoxLayout(dialog);
+    outputDialog = new QDialog(this);
+    outputDialog->setAttribute(Qt::WA_DeleteOnClose);
+    outputDialog->setWindowTitle("Output Simulation");
+    outputDialog->resize(800, 600);
+
+    connect(outputDialog, &QObject::destroyed, this, [this]() {
+        outputDialog     = nullptr;
+        socErrorDiffPlot = nullptr;
+    });
+
+    QVBoxLayout *layout = new QVBoxLayout(outputDialog);
 
     static const QList<QColor> colors = {
-        QColor(40,  110, 255), QColor(255, 100,   0), QColor(0,   180,   0),
-        QColor(180,   0, 180), QColor(255,   0,   0), QColor(0,   200, 200),
-        QColor(255, 200,   0), QColor(0,   100, 100), QColor(255,   0, 150),
-        QColor(100, 100,   0), QColor(0,    50, 200), QColor(200, 100,  50),
-        QColor(100, 200,   0), QColor(200,   0,  50), QColor(0,   150, 255),
-        QColor(150,   0, 255), QColor(255, 150,   0), QColor(0,   200, 100),
-        QColor(200, 200,   0), QColor(100,   0, 200),
+        QColor(  0, 114, 178),
+        QColor(213,  94,   0),
+        QColor(  0, 158, 115),
+        QColor(204, 121,  33),
+        QColor( 86, 180, 233),
+        QColor(230, 159,   0),
+        QColor(240, 228,  66),
     };
 
-    // Create plots for this window
-    socErrorDiffPlot    = new Plot(400, 100, false, dialog);
-
-    // SoC algo diff plot
+    socErrorDiffPlot = new Plot(400, 100, false, outputDialog);
     socErrorDiffPlot->setTitle("SoC Error Difference");
     socErrorDiffPlot->setYLabel("[%]");
     socErrorDiffPlot->setXLabel("[s]");
@@ -1024,58 +992,42 @@ void SimulatorWnd::onOutputSimulationChecked(){
     layout->addWidget(socErrorDiffPlot);
 
     socErrorDiffPlot->clearAllGraphs();
-
-
     socErrorDiffPlot->enableLegend(true);
 
-    // This info is for plot on soc error difference
-    QVector<double> socError = {0};
-
+    QVector<double> socError;
     int plotIdx = 0;
 
-    // Plot all other graphs
     for (int i = 0; i < algoTabs.size(); i++) {
-
-        // Check if algo is selected in simulation settings
         bool show = (i < visibleAlgosInCompare.size()) ? visibleAlgosInCompare[i] : true;
-
-        // If it's not selected skip algo, doesn't need to be plotted
         if (!show) continue;
 
-
-        // take algo tab
         const algoTab_t &tab = algoTabs[i];
-        QColor colorAlgo   = colors[i % colors.size()];
-        QColor colorSoCBat = colorAlgo.lighter(140);
+        QColor colorAlgo = colors[i % colors.size()];
 
-        // Reload the value
-        socError = {0};
-
-        for(int j = 0; j < tab.simulatorSample.soc.algoSoc.size(); j++){
-            socError.append(tab.simulatorSample.soc.algoSoc[j] - tab.simulatorSample.soc.battery[j]);
+        socError.clear();
+        int size = qMin(tab.simulatorSample.soc.algoSoc.size(),
+                        tab.simulatorSample.soc.battery.size());
+        socError.reserve(size);
+        for (int j = 0; j < size; j++) {
+            socError.append(
+                tab.simulatorSample.soc.algoSoc[j] -
+                tab.simulatorSample.soc.battery[j]);
         }
 
-
-        // ── Voltage, Battery & Platform Current ───────────────────────────────────────────────────
         if (plotIdx == 0) {
-            // Soc Error Difference
             socErrorDiffPlot->setGraphName(0, tab.algoName);
-            socErrorDiffPlot->setGraphLineWidth(0, 2);
+            socErrorDiffPlot->setGraphLineWidth(0, PLOT_LINE_WIDTH);
             socErrorDiffPlot->setData(socError, tab.simulatorSample.time);
-
         } else {
-            // Soc Error Difference
             socErrorDiffPlot->addLineGraph(colorAlgo, tab.algoName);
-            socErrorDiffPlot->setGraphLineWidth(plotIdx, 2);
+            socErrorDiffPlot->setGraphLineWidth(plotIdx, PLOT_LINE_WIDTH);
             socErrorDiffPlot->setGraphData(plotIdx, socError, tab.simulatorSample.time);
         }
         plotIdx++;
     }
 
-    // Replot all graphs
     socErrorDiffPlot->replotAll();
-
-    dialog->show();
+    outputDialog->show();
 }
 
 /*******************************************************************************
@@ -1103,6 +1055,7 @@ void SimulatorWnd::onLogInfoClicked()
 
             // Fulfill the table
             QTableWidget *table = createResultsTable(
+                tab,
                 tab.avgBatteryCurr,
                 tab.avgSystemCurr,
                 tab.container->getLastValuesOfSimulationStep(),
@@ -1119,16 +1072,17 @@ void SimulatorWnd::onLogInfoClicked()
     }
     else {
             // Online analisys one tab
-            QTableWidget *table = createResultsTable(
-                averageBatteryCurr,
-                averageSystemCurr,
-                simulatorContainer->getLastValuesOfSimulationStep(),
-                simulatorContainer->getTimeS(),
-                simulatorContainer->getNumberOfSamples(),
-                "",
-                selectedPlatform
-                );
-            layout->addWidget(table);
+            // QTableWidget *table = createResultsTable(
+            //     tab,
+            //     averageBatteryCurr,
+            //     averageSystemCurr,
+            //     simulatorContainer->getLastValuesOfSimulationStep(),
+            //     simulatorContainer->getTimeS(),
+            //     simulatorContainer->getNumberOfSamples(),
+            //     "",
+            //     selectedPlatform
+            //     );
+            // layout->addWidget(table);
     }
 
     // Create exit button
@@ -1200,14 +1154,12 @@ void SimulatorWnd::onStopClicked()
     currentPlatformPlot->clearAllGraphs();
     voltagePlot->clearAllGraphs();
     socPlot->clearAllGraphs();
-    socErrorDiffPlot->clearAllGraphs();
 
     // Disable legends for all graphs
     currentPlatformPlot->enableLegend(false);
     socPlot->enableLegend(false);
     voltagePlot->enableLegend(false);
     currentBatteryPlot->enableLegend(false);
-    socErrorDiffPlot->enableLegend(false);
 
     // Restore for online mode btn and timer period
     if (!isOfflineMode) {
@@ -1328,6 +1280,8 @@ void SimulatorWnd::startOfflineSimulation()
               // Current local sample
               int localSample = 0;
 
+              double maxErr = 0;
+
               // Infinity loop for each algo
               while (!container->isFinished()) {
 
@@ -1344,6 +1298,17 @@ void SimulatorWnd::startOfflineSimulation()
                   vSoc.push_back(soc);
                   vSocIsys.push_back(container->getSoCIsys());
                   vAlgoSoc.push_back(container->getAlgoSoc() * 100.0);
+
+                  // Calculation for postSimulation analysys
+                  double socErr = (container->getAlgoSoc() * 100.0) - soc;
+                  algoTabs[i].postSimulationAnalysys.sumSquaredError += socErr * socErr; // RMSE
+                  algoTabs[i].postSimulationAnalysys.sumAbsError += abs(socErr);              // MAE
+                  algoTabs[i].postSimulationAnalysys.sumError += socErr;              // MAE
+
+                  double maximumError = abs(soc - (container->getAlgoSoc() * 100.0));
+                  if(maximumError > maxErr){
+                      maxErr = maximumError;
+                  }
 
                   // Accumulate value for average current
                   avgCurrBat += container->getIBat();
@@ -1370,6 +1335,10 @@ void SimulatorWnd::startOfflineSimulation()
                   avgCurrSys /= localSample;
               }
 
+              algoTabs[i].sampleNum = localSample;
+              algoTabs[i].postSimulationAnalysys.maxErr = maxErr;
+
+
               // Back to main thread: store data and replot if active tab
               QMetaObject::invokeMethod(this,
                                         [this, i, avgCurrBat, avgCurrSys,
@@ -1387,6 +1356,22 @@ void SimulatorWnd::startOfflineSimulation()
                     algoTabs[i].simulatorSample.soc.battery      = vSoc;
                     algoTabs[i].simulatorSample.soc.system       = vSocIsys;
                     algoTabs[i].simulatorSample.soc.algoSoc      = vAlgoSoc;
+
+                    // Add post simulation analysys in structure
+                    int n = algoTabs[i].sampleNum;
+
+                    double rmse = (n > 0) ? sqrt(algoTabs[i].postSimulationAnalysys.sumSquaredError / n) : 0.0;
+                    double mae  = (n > 0) ? (algoTabs[i].postSimulationAnalysys.sumAbsError / n)          : 0.0;
+                    double bias = (n > 0) ? (algoTabs[i].postSimulationAnalysys.sumError / n)             : 0.0;
+
+                    // Std Dev: σ = sqrt(RMSE² - Bias²)
+                    double stdDev = (n > 0) ? sqrt(std::max(0.0, rmse * rmse - bias * bias)) : 0.0;
+
+                    algoTabs[i].postSimulationAnalysys.rmse   = rmse;
+                    algoTabs[i].postSimulationAnalysys.mae    = mae;
+                    algoTabs[i].postSimulationAnalysys.bias   = bias;
+                    algoTabs[i].postSimulationAnalysys.stdDev = stdDev;
+
 
                     // Print in log tab that algo is finished
                     qDebug() << "Tab" << algoTabs[i].algoName << "finished";
@@ -1518,6 +1503,7 @@ static QString formatSeconds(float totalSeconds)
 }
 
 QTableWidget* SimulatorWnd::createResultsTable(
+    algoTab_t tab,
     double avgBat, double avgSys,
     lastSimulationStepsValues finalResults,
     float timeElapsed, int totalSamples,
@@ -1590,9 +1576,11 @@ QTableWidget* SimulatorWnd::createResultsTable(
     double avgBatCurrMa = avgBat * 1000.0; // [A] -> [mA]
 
     // Calculates operational times based on average current and capacity of batteries
-    float maxOpTime = (avgSysCurrMa > 0.0) ? (float)((capacityMah / avgSysCurrMa) * 3600.0) : 0.0f;
-    float sysOpTime = (avgBatCurrMa > 0.0) ? (float)((capacityMah / avgBatCurrMa) * 3600.0) : 0.0f;
-    float algoCost  = maxOpTime - sysOpTime;
+    double effectiveCapacity = capacityMah - finalResults.lastElectricChargeAlgo;
+
+    double maxOpTime = (avgSysCurrMa > 0.0) ? (capacityMah / avgSysCurrMa) * 3600.0 : 0.0;
+    double sysOpTime = (avgSysCurrMa > 0.0) ? (effectiveCapacity / avgSysCurrMa) * 3600.0 : 0.0;
+    double algoCost = maxOpTime - sysOpTime;
 
     // Create table with variables that we calculate
     addSeparator("General");
@@ -1619,10 +1607,10 @@ QTableWidget* SimulatorWnd::createResultsTable(
 
     // Electric charges things
     addSeparator("Electric Charge");
-    addRow("Battery Capacity", QString("%1 mAh").arg(capacityMah, 0, 'f', 2));
-    addRow("Charge Battery",   QString("%1 mAh").arg(finalResults.lastElectricChargeBattery, 0, 'f', 4));
-    addRow("Charge System",    QString("%1 mAh").arg(finalResults.lastElectricChargeSystem,  0, 'f', 4));
-    addRow("Charge Algo",      QString("%1 mAh").arg(finalResults.lastElectricChargeAlgo,    0, 'f', 4));
+    addRow("Battery Capacity", QString::number(capacityMah, 'f', 4) + " mAh");
+    addRow("Charge Battery",   QString::number(finalResults.lastElectricChargeBattery, 'f', 6) + " mAh");
+    addRow("Charge System",    QString::number(finalResults.lastElectricChargeSystem,  'f', 6) + " mAh");
+    addRow("Charge Algo",      QString::number(finalResults.lastElectricChargeAlgo,    'f', 6) + " mAh");
 
     // Time simulations things
     addSeparator("Time");
@@ -1630,6 +1618,14 @@ QTableWidget* SimulatorWnd::createResultsTable(
     addRow("Maximal Oper. Time", formatSeconds(maxOpTime));
     addRow("System Oper. Time",  formatSeconds(sysOpTime));
     addRow("Algo Time Cost",     formatSeconds(algoCost), true);
+
+    // Output Analysis (SoC Algo)
+    addSeparator("OutputAlgo (SoC Algo)");
+    addRow("RMSE",  QString("%1 %").arg(tab.postSimulationAnalysys.rmse, 0, 'f', 1), true);
+    addRow("MAE",  QString("%1 %").arg(tab.postSimulationAnalysys.mae, 0, 'f', 1), true);
+    addRow("Max Error",  QString("%1 %").arg(tab.postSimulationAnalysys.maxErr, 0, 'f', 1), true);
+    addRow("Bias",  QString("%1 %").arg(tab.postSimulationAnalysys.bias, 0, 'f', 1), true);
+    addRow("Standard Deviation",  QString("%1 %").arg(tab.postSimulationAnalysys.stdDev, 0, 'f', 1), true);
 
     return table;
 }
@@ -1640,8 +1636,7 @@ static QString algoTabName(algoTimeTableDuration_e algo)
     switch (algo) {
     case K0:             return "K0";
     case K2:             return "K2";
-    case LP:             return "LP";
-    case ADAPTIVE_LP_K2: return "Adaptive";
+    case LP:             return "CC";
     default:             return "Unknown";
     }
 }

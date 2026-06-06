@@ -7,9 +7,9 @@
 #define WHITCH_PLATFORM 0; // Index of platform_current_mah_e
 
 typedef enum platform_current_mah_e{
-    PLATFORM_CURRENT_ESP = 80,
+    PLATFORM_CURRENT_ESP = 10,
     PLATFORM_CURRENT_NXP = 100,
-    PLATFORM_CURRENT_STM = 120,
+    PLATFORM_CURRENT_STM = 10,
     PLATFORM_CURRENT_NRF = 60
 } platform_current_mah_e;
 

@@ -12,12 +12,12 @@ typedef enum algoPreProcessingTime_e{
 } algoPreProcessingTime_e;
 
 typedef enum algoProcessingSystemTime_e{
-    LP_SYSTEM_TIME          = 1000,
-    K0_SYSTEM_TIME          = 100,
-    K2_SYSTEM_TIME          = 100,
-    ADAPTIVE_LP_SYSTEM_TIME = 100,
-    ADAPTIVE_LP_K0_SYSTEM_TIME = 100,
-    ADAPTIVE_LP_K2_SYSTEM_TIME = 100,
+    LP_SYSTEM_TIME          = 10,    // 10μs  → 0.001ms  (zanemarljivo)
+    K0_SYSTEM_TIME          = 1500, // 1500μs → 1.5ms
+    K2_SYSTEM_TIME          = 5000, // 5000μs → 5ms
+    ADAPTIVE_LP_SYSTEM_TIME    = LP_SYSTEM_TIME,
+    ADAPTIVE_LP_K0_SYSTEM_TIME = K0_SYSTEM_TIME,
+    ADAPTIVE_LP_K2_SYSTEM_TIME = K2_SYSTEM_TIME,
 } algoProcessingSystemTime_e;
 
 
@@ -32,14 +32,13 @@ typedef enum algoPostProcessingTime_e{
 
 
 typedef enum algoTimeTableDuration_e{
-    LP = 10,
-    K0 = 50,
-    K2 = 1000,
-    ADAPTIVE_LP = LP,
-    ADAPTIVE_LP_K0 = LP + K0,
-    ADAPTIVE_LP_K2 = LP + K2
+    LP          = LP_SYSTEM_TIME,           // 1μs
+    K0          = K0_SYSTEM_TIME,           // 1500μs
+    K2          = K2_SYSTEM_TIME,           // 5000μs
+    ADAPTIVE_LP    = LP_SYSTEM_TIME,
+    ADAPTIVE_LP_K0 = K0_SYSTEM_TIME,
+    ADAPTIVE_LP_K2 = K2_SYSTEM_TIME
 } algoTimeTableDuration_e;
-
 Q_DECLARE_METATYPE(algoTimeTableDuration_e)
 
 class TimeTable : public QObject{
@@ -56,14 +55,11 @@ public:
     int getProcessingSystemTime(algoTimeTableDuration_e algo) const {
         switch(algo) {
         case LP:              return LP_SYSTEM_TIME;
-        case K0:              return LP_SYSTEM_TIME;
+        case K0:              return K0_SYSTEM_TIME;
         case K2:              return K2_SYSTEM_TIME;
-        case ADAPTIVE_LP_K0:  return LP_SYSTEM_TIME;
-        case ADAPTIVE_LP_K2:  return LP_SYSTEM_TIME;
         default:              return LP_SYSTEM_TIME;
         }
     }
-
     int getTotalDuration(algoTimeTableDuration_e algo) const;
 
     algoTimeTableDuration_e getWhitchAlgo() const;

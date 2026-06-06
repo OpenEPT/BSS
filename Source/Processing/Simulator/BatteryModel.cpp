@@ -1,8 +1,13 @@
 #include "BatteryModel.h"
 #include "SimulatorInputProcessing.h"
 #include "SocReference.h"
+#include "../../AlgoLibrary/Operations/Matrix/matrix_types.h"
+#include "../../AlgoLibrary/Operations/Parameters/parameters.h"
+#include "../../AlgoLibrary/Operations/Poly/poly.h"
 #include <cmath>
 #include <QDebug>
+
+extern const float_point_t PARAMETERS_OCV_INFO[3][1000];
 
 BatteryModel::BatteryModel(QObject *parent)
     : QObject{parent}

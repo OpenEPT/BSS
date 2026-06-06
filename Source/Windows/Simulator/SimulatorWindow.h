@@ -49,10 +49,23 @@ typedef struct SimulatorSample_t {
     electricCharges_t  electricCharge;
 } SimulatorSample_t;
 
+
+typedef struct postSimulationAnalysys_t {
+    double rmse            = 0.0;
+    double mae             = 0.0;
+    double bias            = 0.0;
+    double stdDev          = 0.0;
+    double sumSquaredError = 0.0;
+    double sumAbsError     = 0.0;
+    double sumError        = 0.0;
+    double maxErr          = 0.0;
+} postSimulationAnalysys_t;
+
 /*******************************************************************************
  * AlgoTab - Algorithm Subsystem Block
  ******************************************************************************/
 typedef struct algoTab_t {
+    uint64_t                 sampleNum = 0;
     algoTimeTableDuration_e  algo;
     QString                  algoName;
     QString                  platformName;
@@ -62,6 +75,7 @@ typedef struct algoTab_t {
     PlatformCurrent         *platformCurrent = nullptr;
     SimulatorContainer      *container       = nullptr;
     SimulatorSample_t        simulatorSample;
+    postSimulationAnalysys_t postSimulationAnalysys;
     double avgBatteryCurr = 0.0;
     double avgSystemCurr  = 0.0;
 } algoTab_t;
@@ -119,7 +133,8 @@ private slots:
                 const QString &color = "None",
                 simulationState_e simulationState = SIMULATION_UNINIT);
 
-    QTableWidget* createResultsTable(double avgBat,
+    QTableWidget* createResultsTable(algoTab_t tab,
+                                    double avgBat,
                                     double avgSys,
                                     lastSimulationStepsValues finalResults,
                                     float timeElapsed,
@@ -146,6 +161,8 @@ private:
     // Saving tagle from config settings to know which algo's are previous choosed
     QList<algoTableRow_t> savedAlgoTableRows;
 
+    QDialog *outputDialog = nullptr;
+
     // ── Toolbar ───────────────────────────────────────────────────────────────
     QPushButton *playBtn;
     QPushButton *stopBtn;
@@ -162,7 +179,7 @@ private:
     Plot *currentSystemPlot;
     Plot *voltagePlot;
     Plot *socPlot;
-    Plot *socErrorDiffPlot;
+    Plot *socErrorDiffPlot = nullptr;
 
     // ── Dock widgets ──────────────────────────────────────────────────────────
     QDockWidget *currentBatteryDock;

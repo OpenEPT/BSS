@@ -50,6 +50,17 @@ SOURCES += \
     Windows/Plot/plot.cpp \
     Windows/Simulator/SimulatorWindow.cpp \
     Windows/WSSelection/selectworkspace.cpp \
+    AlgoLibrary/Kalman/kalman.c \
+    AlgoLibrary/Kalman/kalman0.c \
+    #AlgoLibrary/Kalman/kalman_v2.c \
+    AlgoLibrary/Kalman/kalman_adaptive.c \
+    AlgoLibrary/LoadProfiler/load_profiler.c \
+    AlgoLibrary/Profiler/profiler.c \
+    AlgoLibrary/Operations/Matrix/matrix.c \
+    #AlgoLibrary/Operations/Matrix/matrix_v2.c \ #Just matrix.c
+    AlgoLibrary/Operations/Parameters/parameters.c \
+    AlgoLibrary/Operations/Parameters/parameters_data.c \
+    AlgoLibrary/Operations/Poly/poly.c \
     device.cpp \
     devicecontainer.cpp \
     main.cpp \
@@ -89,6 +100,19 @@ HEADERS += \
     Windows/Plot/plot.h \
     Windows/Simulator/SimulatorWindow.h \
     Windows/WSSelection/selectworkspace.h \
+    AlgoLibrary/Kalman/kalman.h \
+    AlgoLibrary/Kalman/kalman0.h \
+    AlgoLibrary/Kalman/kalman_adaptive.h \
+    AlgoLibrary/Kalman/kalman_config.h \
+    AlgoLibrary/LoadProfiler/load_profiler.h \
+    AlgoLibrary/Profiler/profiler.h \
+    AlgoLibrary/Operations/Matrix/matrix_v2_inline.h \
+    AlgoLibrary/Operations/Matrix/matrix_types.h \
+    AlgoLibrary/Operations/Matrix/matrix.h \
+    #AlgoLibrary/Operations/Matrix/matrix_v2.h \ #Just matrix.h
+    AlgoLibrary/Operations/Parameters/parameters.h \
+    AlgoLibrary/Operations/Parameters/parameters_config.h \
+    AlgoLibrary/Operations/Poly/poly.h \
     device.h \
     devicecontainer.h \
     openept.h

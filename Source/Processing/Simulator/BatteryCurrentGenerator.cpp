@@ -19,6 +19,8 @@ double BatteryCurrentGenerator::getSystemCurrent(double currA){
 
 void BatteryCurrentGenerator::getBcgParams(double currA) {
 
+    // algo->onPlatformCurrentReady(iPlatformNow);
+
     algoCurrentInfo_t algoCurrentInfo = algo->preProcessing();
 
     switch(algoCurrentInfo.flag) {

@@ -57,7 +57,7 @@ public:
     void setOutputPath     (const QString &p) { outputFilePath  = p;  }
     void setOfflineMode    (bool val)         { offlineMode     = val;}
     void setPlatformCurrent(platform_current_mah_e pc) { platformCurr->setPlatformCurrent(pc); }
-    void setAlgoSelected   (algoTimeTableDuration_e a) { algoSelectContainer = a; }
+    void setAlgoSelected   (algoTimeTableDuration_e algo);
 
     // Getters
     double getTimeS()       const { return timeS; }
@@ -107,6 +107,7 @@ private:
     QString flagPath;
 
     // State
+    algoTimeTableDuration_e currentAlgo;
     algoTimeTableDuration_e algoSelectContainer;
     lastSimulationStepsValues lastValues;
     electricCharges_t electricCharges;

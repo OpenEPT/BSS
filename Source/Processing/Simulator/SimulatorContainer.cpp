@@ -74,8 +74,6 @@ static QString algoToString(algoTimeTableDuration_e algo)
     case LP:             return "LP";
     case K0:             return "K0";
     case K2:             return "K2";
-    case ADAPTIVE_LP_K0: return "ADAPTIVE_LP_K0";
-    case ADAPTIVE_LP_K2: return "ADAPTIVE_LP_K2";
     default:             return "UNKNOWN";
     }
 }
@@ -167,6 +165,8 @@ bool SimulatorContainer::loadFiles()
     batteryCurrGen->setAlgo(algo);
     voltageEstimator->voltageEstimatorInit(batteryModel);
 
+    algo->setAlgo(currentAlgo);
+
     globalSampleIndex = 0;
     electricCharges   = {0.0, 0.0, 0.0};
 
@@ -193,7 +193,7 @@ void SimulatorContainer::step()
         iSysA = currVec[globalSampleIndex] / 1000.0;
 
     // Superimpose the noise and current
-    //iSysA += noise.currentNoise;
+    iSysA += noise.currentNoise;
 
     // Take time in seconds
     if (globalSampleIndex < timeVec.size())
@@ -211,6 +211,7 @@ void SimulatorContainer::step()
     double iBat      = batteryCurrGen->getIBat();
     double vBat      = voltageEstimator->getVTerminal();
     double soc       = batteryModel->getSoC() * 100.0;
+    //double soc       =  100.0 - algo->getQBath() * 100.0;
     double iPlatform = batteryCurrGen->getIplatform();
 
     // Take flag to write in a file
@@ -273,4 +274,9 @@ void SimulatorContainer::reset(double SocReference)
 bool SimulatorContainer::isFinished() const
 {
     return globalSampleIndex >= inputProcessing->getNumberOfSamples();
+}
+
+void SimulatorContainer::setAlgoSelected(algoTimeTableDuration_e algo)
+{
+    currentAlgo = algo;
 }

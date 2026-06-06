@@ -1,18 +1,27 @@
 #include "Algo.h"
+#include "QDebug"
 
 
 Algo::Algo(algoTimeTableDuration_e whitchAlgo,
            algoConfig_t config,
+           void *userInitParams,
            QObject *p)
     : QObject(p)
 {
     this->algo = whitchAlgo;
     algoInit(config);
+    algoInitUser(userInitParams);
 }
 
 void Algo::algoInit(const algoConfig_t &config)
 {
     algoConfig = config;
+}
+
+void Algo::algoInitUser(void *initiParams)
+{
+    KALMAN0_Init(&k0);
+    KALMAN_Init(&k2);
 }
 
 void Algo::onPlatformCurrentReady(double currentA){
@@ -45,11 +54,11 @@ algoCurrentInfo_t Algo::preProcessing(){
 }
 
 
-void Algo::processing(double iBat){
+void Algo::processing(double vBat, double iBat){
     processingSystem(iBat);
 
     if (currentFlag == P){
-        processingUser(iBat);
+        processingUser(vBat, iBat);
     }
 
     // Call Post Processing
@@ -69,7 +78,7 @@ algoCurrentInfo_t Algo::preProcessingSystem()
 {
     // Take every step current and previous flag
     if (algoConfig.periodMode == ALGO_PERIOD_FIXED) {
-        previousFlag = currentFlag;  // ← sačuvaj pre promene
+        previousFlag = currentFlag;
 
         fixedPeriodCounter++;
 
@@ -80,33 +89,17 @@ algoCurrentInfo_t Algo::preProcessingSystem()
             currentFlag = N;
         }
     } else {
-        // Čita iz fajla - postojeći kod
         if (currentDynIndex < algoDynamics.size()) {
-            if (remainingSteps > 0) {
-                currentFlag = algoDynamics[currentDynIndex - 1].flag;
-                remainingSteps--;
-            } else {
-                currentFlag = algoDynamics[currentDynIndex].flag;
+            previousFlag = currentFlag;
 
-                if (currentDynIndex == 0) {
-                    previousFlag = N;
-                } else {
-                    previousFlag = algoDynamics[currentDynIndex - 1].flag;
-                }
+            currentFlag = algoDynamics[currentDynIndex].flag;
 
-                remainingSteps = algoDynamics[currentDynIndex].exe - 1;
-
-                if (currentDynIndex >= 2) {
-                    lastRemainingSteps = algoDynamics[currentDynIndex - 2].exe;
-                } else {
-                    lastRemainingSteps = 0;
-                }
-
-                lastRemainingSteps = currentDynIndex++;
+            int algoType = algoDynamics[currentDynIndex].exe;
+            if (currentFlag == P && algoType > 0) {
+                algo = intToAlgoDuration(algoType);
             }
         }
     }
-
     // If latched - always output P regardless of what vector says
     if (ppDone) {
 
@@ -117,6 +110,7 @@ algoCurrentInfo_t Algo::preProcessingSystem()
         calculateExeTimeInProcessing = false;
         algoCurrentInfo.flag = P;
 
+        algoCurrentInfo.time += 0.01f;
         return algoCurrentInfo; // BCG request flag
     }
 
@@ -125,11 +119,15 @@ algoCurrentInfo_t Algo::preProcessingSystem()
         algoPeriod = 0;
         lastFlag = previousFlag;
 
-        algoCurrentInfo.flag = lastFlag;
+        // TODO: Check when algo duration is bigger then Ts
+        //algoCurrentInfo.flag = lastFlag;
+        algoCurrentInfo.flag = currentFlag;
 
         calculateExeTimeInProcessing = true;
         ppDone = true;
 
+
+        algoCurrentInfo.time += 0.01f;
         return algoCurrentInfo;
     }
 
@@ -152,6 +150,9 @@ algoCurrentInfo_t Algo::preProcessingSystem()
     lastFlag = currentFlag;
     algoCurrentInfo.flag = ppDone ? P : currentFlag;
 
+
+    algoCurrentInfo.time += 0.01f;
+
     return algoCurrentInfo;
 }
 
@@ -163,23 +164,7 @@ void Algo::processingSystem(double iBat)
     veReady       = false;
     algoStates.processing = ALGO_PROCESSING_RUNNING;
 
-
     if (calculateExeTimeInProcessing == true){
-        // Get exe
-        int exeCycles = 0;
-
-        if(algoConfig.periodMode == ALGO_PERIOD_FROM_FILE){
-            if (currentDynIndex > 0 && currentDynIndex <= algoDynamics.size()) {
-                exeCycles = algoDynamics[currentDynIndex - 1].exe;
-                algo = intToAlgoDuration(exeCycles);
-            }
-        }
-
-        else{
-            // Algo is already good value due to init algo
-        }
-
-        // Trigger TimeTable → onAlgoDuration → ppCycles
         emit getWitchAlgo(algo);
     }
 }
@@ -202,6 +187,7 @@ void Algo::postProcessingSystem()
 
         nextCycleResetAlgoPeriod = true;;
         ppDone                   = false;
+        currentFlag              = N;
 
         ppCounter                 = 0;
         ppCycles                  = 0;
@@ -209,26 +195,49 @@ void Algo::postProcessingSystem()
 
         emit preprocessingDone();
     }
+
+    currentDynIndex++;
 }
 
 
 /*********** Algo User processing functions *******************/
 void Algo::preProcessingUser(){}
 
-void Algo::processingUser(float iBat){
+void Algo::processingUser(double vBat, float iBat)
+{
+    int perf1 = 0;
 
-    // P flag - Calculate Coulomb Counter
-    algoSocOutput -= (iBat * (static_cast<float>(algoPeriod) * 0.01f)) / (457.0f * 3.6f);
+    float Ts   = algoPeriod * 0.01f;
+    float QmAh = 457.0f;
 
-    if (algoSocOutput < 0.0f) algoSocOutput = 0.0f;
-    if (algoSocOutput > 1.0f) algoSocOutput = 1.0f;
-
+    switch(currentAlgo)
+    {
+    case K0:{
+        KALMAN0_Predict(&k0, iBat, Ts, QmAh, &perf1);
+        algoSocOutput = KALMAN0_Update(&k0, iBat, vBat);
+        break;
+    }
+    case K2:{
+        KALMAN_Predict(&k2, iBat, Ts, QmAh, &perf1);
+        algoSocOutput = KALMAN_Update(&k2, iBat, vBat);
+        break;
+    }
+    case LP:{
+        float dSoC = -(iBat * Ts) / (QmAh * 3.6f);
+        algoSocOutput += dSoC;
+        break;
+    }
+    default:
+        break;
+    }
 }
+
+
 void Algo::postProcessingUser(){}
 
 
 // Getters:
-float Algo::getQBath(){
+double Algo::getQBath(){
     return qBath;
 }
 
@@ -237,30 +246,26 @@ float Algo::getQBath(){
 
 void Algo::onAlgoDuration(int duration)
 {
-    float T_algo = static_cast<float>(duration) / 1000.0f; // ms → s
-    float Ts     = 0.01f; // 10ms
+    // duration [μs]
+    float T_algo = static_cast<float>(duration) / 1000000.0f; // μs → s
+    float Ts     = 0.01f; // 10[ms] -> 0.01s
 
     algoDurationPerSample = T_algo; // [s]
 
-    if (Ts >= T_algo) {
-        ppCycles = 0;
+    if (T_algo <= Ts) {
+        ppCycles = 1;
         return;
-    }
-
-    // Clamp value to the sample value
-    if(algoDurationPerSample >= Ts){
-        algoDurationPerSample = Ts;
     }
 
     ppCycles = static_cast<int>(T_algo / Ts);
 }
 
-void Algo::onVoltageEstimatorDone(double vBat, float iSys, float iPlatform, double iBat, float soc)
+void Algo::onVoltageEstimatorDone(double vBat, float iSys, float iPlatform, float iBat, float soc)
 {
-    Q_UNUSED(vBat) Q_UNUSED(iSys) Q_UNUSED(iPlatform) Q_UNUSED(soc)
+    Q_UNUSED(iSys) Q_UNUSED(iPlatform) Q_UNUSED(soc)
 
     veReady = true;     // Set Vrdy
-    processing(iBat);       // Call processing system
+    processing(vBat, iBat);       // Call processing system
 }
 
 algoTimeTableDuration_e Algo::intToAlgoDuration(int index)
@@ -276,4 +281,8 @@ algoTimeTableDuration_e Algo::intToAlgoDuration(int index)
     }
 }
 
+void Algo::setAlgo(algoTimeTableDuration_e algo)
+{
+    currentAlgo = algo;
+}
 
